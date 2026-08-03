@@ -1087,14 +1087,33 @@
     var box = document.getElementById('editRoomEquipList');
     box.innerHTML = EQUIPMENT.map(function (eq) {
       var checked = checkedEquipIds.indexOf(eq.id) !== -1 ? ' checked' : '';
-      return '<label style="display:flex; align-items:center; gap:5px; font-size:12px; border:1.5px solid var(--gray-200); border-radius:100px; padding:6px 11px; cursor:pointer;">' +
-        '<input type="checkbox" data-equip-id="' + eq.id + '"' + checked + ' style="width:auto; height:auto;">' + escapeHtml(eq.name) + '</label>';
+      return '<span style="display:inline-flex; align-items:center; gap:5px; font-size:12px; border:1.5px solid var(--gray-200); border-radius:100px; padding:6px 6px 6px 11px;">' +
+        '<label style="display:flex; align-items:center; gap:5px; cursor:pointer;">' +
+        '<input type="checkbox" data-equip-id="' + eq.id + '"' + checked + ' style="width:auto; height:auto;">' + escapeHtml(eq.name) + '</label>' +
+        '<button type="button" data-del-equip="' + eq.id + '" title="기자재 종류 자체를 삭제" style="border:none; background:none; color:var(--danger); cursor:pointer; font-size:13px; line-height:1; padding:0 2px;">×</button>' +
+        '</span>';
     }).join('');
+    box.querySelectorAll('[data-del-equip]').forEach(function (btn) {
+      btn.addEventListener('click', function (e) { e.stopPropagation(); deleteEquipmentType(parseInt(btn.getAttribute('data-del-equip'), 10)); });
+    });
   }
 
   function currentlyCheckedEquipIds() {
     var checked = document.querySelectorAll('#editRoomEquipList input:checked');
     return Array.prototype.slice.call(checked).map(function (cb) { return parseInt(cb.getAttribute('data-equip-id'), 10); });
+  }
+
+  async function deleteEquipmentType(equipId) {
+    var eq = EQUIPMENT.filter(function (e) { return e.id === equipId; })[0];
+    if (!eq) return;
+    if (!confirm('"' + eq.name + '"을(를) 기자재 목록에서 완전히 삭제할까요?\n이 기자재를 등록해둔 다른 모든 강의실에서도 같이 빠집니다.')) return;
+
+    var stillChecked = currentlyCheckedEquipIds().filter(function (id) { return id !== equipId; });
+    var res = await supabaseClient.from('equipment').delete().eq('id', equipId);
+    if (res.error) { alert('삭제 실패: ' + res.error.message); return; }
+
+    EQUIPMENT = EQUIPMENT.filter(function (e) { return e.id !== equipId; });
+    renderEditRoomEquipList(stillChecked);
   }
 
   document.getElementById('addEquipBtn').addEventListener('click', async function () {

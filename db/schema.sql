@@ -415,6 +415,10 @@ CREATE POLICY equipment_manage ON equipment FOR ALL
 CREATE POLICY equipment_insert_by_mid_admin ON equipment FOR INSERT
     WITH CHECK (current_assistant_role() IN ('mid_admin', 'final_admin'));
 
+-- 삭제도 허용 (room_equipment.equipment_id가 ON DELETE CASCADE라 다른 강의실에서도 같이 빠짐 - 프론트에서 경고)
+CREATE POLICY equipment_delete_by_mid_admin ON equipment FOR DELETE
+    USING (current_assistant_role() IN ('mid_admin', 'final_admin'));
+
 -- ---- rooms: 전체 조회 가능, CRUD는 final_admin 누구나 (건물 무관, 전체 총괄) ----
 CREATE POLICY rooms_select ON rooms FOR SELECT USING (TRUE);
 
