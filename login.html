@@ -258,7 +258,7 @@
         return;
       }
 
-      var profileResult = await supabase
+      var profileResult = await supabaseClient
         .from("assistants")
         .select("role, is_active")
         .eq("id", signInResult.data.user.id)

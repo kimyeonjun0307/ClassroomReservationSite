@@ -280,7 +280,7 @@
   function formatDateTime(iso) { return iso.slice(0, 10); }
 
   async function loadBookings(userId) {
-    var res = await supabase
+    var res = await supabaseClient
       .from('bookings')
       .select('id, date, start_time, end_time, purpose, status, review_comment, created_at, rooms(room_name)')
       .eq('requester_id', userId)
