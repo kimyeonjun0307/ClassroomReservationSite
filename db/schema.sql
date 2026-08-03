@@ -430,6 +430,11 @@ CREATE POLICY rooms_manage_by_final_admin ON rooms FOR ALL
     USING (current_assistant_role() = 'final_admin' AND building_id = current_building_id())
     WITH CHECK (current_assistant_role() = 'final_admin' AND building_id = current_building_id());
 
+-- 담당 중간관리자는 자기 강의실 정보(이름/수용인원/이용수칙/문의처)를 직접 수정 가능 (manager.html)
+CREATE POLICY rooms_update_by_manager ON rooms FOR UPDATE
+    USING (manager_id = auth.uid())
+    WITH CHECK (manager_id = auth.uid());
+
 CREATE POLICY room_equipment_select ON room_equipment FOR SELECT USING (TRUE);
 CREATE POLICY room_equipment_manage ON room_equipment FOR ALL
     USING (is_manager_of_room(room_id) OR EXISTS (
