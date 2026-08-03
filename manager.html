@@ -738,6 +738,7 @@
       .order('floor').order('room_name');
     if (res.error) { console.error('loadMyRooms failed:', res.error); alert('담당 강의실 목록을 불러오지 못했습니다: ' + res.error.message); }
     MY_ROOMS = res.data || [];
+    console.log('MY_ROOMS(' + MY_ROOMS.length + '건):', MY_ROOMS.map(function (r) { return { room_name: r.room_name, floor: r.floor, floor_type: typeof r.floor }; }));
   }
 
   function currentRoomList() {
@@ -795,6 +796,8 @@
   async function refreshAll() {
     await loadScheduleForDate();
     await loadPendingBookings();
+    renderFloorGrid();
+    renderMyRoomGroup();
     renderTimeline();
     renderPendingBottomList();
     updateSummary();
