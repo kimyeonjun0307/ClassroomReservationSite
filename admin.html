@@ -504,7 +504,7 @@
   async function loadRooms() {
     var res = await supabaseClient
       .from('rooms')
-      .select('id, floor, room_no, room_name, capacity, status, manager_id, building_id, buildings(name), room_types(name), room_equipment(equipment(name)), manager:assistants(name)')
+      .select('id, floor, room_no, room_name, capacity, status, manager_id, building_id, buildings(name), room_types(name), room_equipment(equipment(name)), manager:assistants!manager_id(name)')
       .eq('is_active', true)
       .order('floor').order('room_no');
     if (res.error) { console.error('loadRooms failed:', res.error); alert('강의실 목록을 불러오지 못했습니다: ' + res.error.message); }
