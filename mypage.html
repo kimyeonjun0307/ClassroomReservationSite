@@ -425,6 +425,7 @@
     var auth = await requireRole(['assistant']);
     if (!auth) return;
     CURRENT_PROFILE = auth.profile;
+    document.getElementById('headerUserLabel').textContent = '👤 ' + auth.profile.name;
     document.getElementById('profileName').textContent = auth.profile.name;
     document.getElementById('profileEmail').textContent = auth.session.user.email;
     document.getElementById('profileJoined').textContent = '가입일 ' + formatDateTime(auth.profile.created_at);
