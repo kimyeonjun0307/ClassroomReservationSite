@@ -254,27 +254,27 @@
     <div class="modal-title">강의실 추가</div>
     <div class="modal-desc">새 강의실 정보를 입력해주세요.</div>
 
-    <div class="field">
-      <label>건물</label>
-      <select id="arBuilding"></select>
-    </div>
     <div class="field-row">
       <div class="field">
-        <label>층</label>
-        <select id="arFloor"></select>
+        <label>층 (지하는 음수, 예: -3)</label>
+        <input type="text" id="arFloor" placeholder="예: 1">
       </div>
       <div class="field">
         <label>호실 번호</label>
-        <input type="text" id="arRoomNumber" placeholder="예: 503">
+        <input type="text" id="arRoomNumber" placeholder="예: U503">
       </div>
     </div>
     <div class="field">
-      <label>수용 인원</label>
-      <input type="text" id="arCapacity" placeholder="예: 30명">
+      <label>강의실명</label>
+      <input type="text" id="arRoomName" placeholder="예: U503 영상강의실">
     </div>
     <div class="field">
-      <label>보유 기자재</label>
-      <input type="text" id="arEquip" placeholder="예: 빔프로젝터, 화이트보드">
+      <label>공간유형</label>
+      <select id="arRoomType"></select>
+    </div>
+    <div class="field">
+      <label>수용 인원</label>
+      <input type="text" id="arCapacity" placeholder="예: 30">
     </div>
     <div class="error-box" id="arErrorBox"></div>
 
@@ -288,8 +288,8 @@
 <!-- 강의실 삭제 확인 모달 -->
 <div class="modal-overlay" id="deleteRoomModalOverlay">
   <div class="modal-box">
-    <div class="modal-title">강의실을 삭제하시겠습니까?</div>
-    <div class="modal-desc" id="deleteRoomDesc">삭제하면 되돌릴 수 없어요. 해당 강의실의 예약 데이터도 함께 표시되지 않게 돼요.</div>
+    <div class="modal-title">강의실을 숨기시겠습니까?</div>
+    <div class="modal-desc" id="deleteRoomDesc">목록/예약 화면에서 숨겨집니다 (기존 예약 기록 보존을 위해 완전히 삭제하지는 않아요). 필요하면 나중에 다시 노출할 수 있어요.</div>
     <div class="modal-actions">
       <button type="button" class="modal-btn-cancel" id="deleteRoomCancelBtn">취소</button>
       <button type="button" class="modal-btn-confirm danger" id="deleteRoomConfirmBtn">삭제</button>
@@ -301,15 +301,11 @@
 <div class="modal-overlay" id="addManagerModalOverlay">
   <div class="modal-box">
     <div class="modal-title">중간관리자 지정</div>
-    <div class="modal-desc">새 중간관리자 계정을 만들고, 담당할 강의실을 함께 선택해주세요.</div>
+    <div class="modal-desc">이미 가입되어 있는 조교(assistant) 계정 중에서 골라 중간관리자로 승격시킵니다. 아직 가입 안 한 사람이면 먼저 홈페이지에서 회원가입(또는 Dashboard에서 계정 생성)부터 해야 해요.</div>
 
     <div class="field">
-      <label>이름</label>
-      <input type="text" id="amName" placeholder="예: 이수정 관리자">
-    </div>
-    <div class="field">
-      <label>이메일</label>
-      <input type="text" id="amEmail" placeholder="예: manager@dongseo.ac.kr">
+      <label>계정 선택</label>
+      <select id="amAssistantSelect"></select>
     </div>
     <div class="field">
       <label>담당 강의실 선택</label>
@@ -340,11 +336,11 @@
 <!-- 중간관리자 삭제 확인 모달 -->
 <div class="modal-overlay" id="deleteManagerModalOverlay">
   <div class="modal-box">
-    <div class="modal-title">계정을 삭제하시겠습니까?</div>
-    <div class="modal-desc" id="deleteManagerDesc">삭제하면 해당 관리자가 담당하던 강의실은 모두 미배정 상태가 돼요.</div>
+    <div class="modal-title">중간관리자 담당을 해제하시겠습니까?</div>
+    <div class="modal-desc" id="deleteManagerDesc">해제하면 이 사람은 다시 일반 조교(assistant) 계정이 되고, 담당하던 강의실은 모두 미배정 상태가 돼요. 계정 자체는 삭제되지 않습니다.</div>
     <div class="modal-actions">
       <button type="button" class="modal-btn-cancel" id="deleteManagerCancelBtn">취소</button>
-      <button type="button" class="modal-btn-confirm danger" id="deleteManagerConfirmBtn">삭제</button>
+      <button type="button" class="modal-btn-confirm danger" id="deleteManagerConfirmBtn">해제</button>
     </div>
   </div>
 </div>
@@ -388,490 +384,433 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/js/supabase-client.js"></script>
 <script>
-  /* ================= 기본 데이터 (admin_mid.html과 동일한 모델을 공유) ================= */
-  var FLOOR_COUNT = 6;
-  var ROOMS_PER_FLOOR = 3;
-  function makeFloors() {
-    var f = {};
-    for (var i = 1; i <= FLOOR_COUNT; i++) {
-      var arr = [];
-      for (var j = 1; j <= ROOMS_PER_FLOOR; j++) arr.push(i + "0" + j);
-      f[String(i)] = arr;
+  var CURRENT_USER = null;
+  var MY_BUILDING_ID = null;
+  var ROOM_TYPES = [];
+  var ROOMS = [];
+  var MID_ADMINS = [];       // role='mid_admin' AND building_id=내 건물
+  var UNASSIGNED_ASSISTANTS = []; // role='assistant' (아직 승격 안 된 계정)
+  var SEMESTERS = [];
+
+  var STATUS_LABELS = { available: '사용가능', maintenance: '공사중', renovation: '리모델링 예정', closed: '사용중지' };
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function floorLabelText(f) { return f < 0 ? ('지하' + (-f) + '층') : (f + '층'); }
+
+  /* ================= 초기화 ================= */
+  (async function init() {
+    var auth = await requireRole(['final_admin']);
+    if (!auth) return;
+    CURRENT_USER = auth.session.user;
+    MY_BUILDING_ID = auth.profile.building_id;
+    document.getElementById('logoutBtn').addEventListener('click', signOutAndRedirect);
+
+    if (!MY_BUILDING_ID) {
+      alert('이 계정에 담당 건물이 지정되어 있지 않습니다. SQL Editor에서 assistants.building_id를 설정해주세요.');
+      return;
     }
-    return f;
+
+    await loadRoomTypes();
+    await refreshAll();
+  })();
+
+  async function loadRoomTypes() {
+    var res = await supabaseClient.from('room_types').select('id, name').order('name');
+    ROOM_TYPES = res.data || [];
+    document.getElementById('arRoomType').innerHTML = ROOM_TYPES.map(function (t) { return '<option value="' + t.id + '">' + escapeHtml(t.name) + '</option>'; }).join('');
   }
 
-  var BUILDINGS = {
-    "UIT 건물": { prefix: "UIT", floors: makeFloors() },
-    "전자정보관": { prefix: "전자정보관", floors: makeFloors() },
-    "뉴밀레니엄관": { prefix: "뉴밀레니엄관", floors: makeFloors() }
-  };
-
-  /* 강의실별 상세정보 (수용인원/기자재) - 없으면 기본값 사용 */
-  var ROOM_DETAILS = {};
-  function roomKey(b, r) { return b + "_" + r; }
-  function getRoomDetail(b, r) {
-    var key = roomKey(b, r);
-    if (!ROOM_DETAILS[key]) ROOM_DETAILS[key] = { capacity: "30명", equip: "빔프로젝터, 화이트보드" };
-    return ROOM_DETAILS[key];
-  }
-  function roomLabel(b, r) {
-    var prefix = BUILDINGS[b].prefix;
-    return prefix === "UIT" ? "UIT " + r : prefix + " " + r;
+  async function refreshAll() {
+    await Promise.all([loadRooms(), loadMidAdmins(), loadSemesters()]);
+    renderRoomTable();
+    renderManagerGrid();
+    renderSemesterTable();
   }
 
-  /* ---------- 강의실 상태 (중간관리자 화면과 localStorage로 공유) ---------- */
-  var STATUS_LABELS = {
-    available: "사용가능", maintenance: "공사중", renovation: "리모델링 예정", closed: "사용중지"
-  };
-  var ROOM_STATUS = {}; // roomKey -> 'available' | 'maintenance' | 'renovation' | 'closed'
-
-  function loadRoomStatus() {
-    try {
-      var raw = localStorage.getItem("roomStatuses");
-      ROOM_STATUS = raw ? JSON.parse(raw) : {};
-    } catch (e) { ROOM_STATUS = {}; }
-  }
-  function saveRoomStatus() {
-    try { localStorage.setItem("roomStatuses", JSON.stringify(ROOM_STATUS)); } catch (e) {}
-  }
-  function getRoomStatus(b, r) { return ROOM_STATUS[roomKey(b, r)] || "available"; }
-  function setRoomStatus(b, r, status) { ROOM_STATUS[roomKey(b, r)] = status; saveRoomStatus(); }
-  loadRoomStatus();
-
-  var MANAGERS = {
-    "sujeong": { name: "이수정 관리자", email: "sujeong@dongseo.ac.kr", rooms: [{ b: "UIT 건물", r: "201" }, { b: "UIT 건물", r: "202" }, { b: "UIT 건물", r: "301" }] },
-    "gwanho":  { name: "박관호 관리자", email: "gwanho@dongseo.ac.kr", rooms: [{ b: "UIT 건물", r: "401" }, { b: "UIT 건물", r: "402" }, { b: "전자정보관", r: "101" }] },
-    "damdang": { name: "김담당 관리자", email: "damdang@dongseo.ac.kr", rooms: [{ b: "뉴밀레니엄관", r: "110" }, { b: "뉴밀레니엄관", r: "210" }, { b: "전자정보관", r: "301" }] }
-  };
-  var managerIdSeq = 100;
-
-  /* ---------- 학기 목록 (모든 중간관리자에게 동일하게 공유되는 전역 목록) ---------- */
-  var semesterIdSeq = 100;
-  var SEMESTERS = [
-    { id: "sem1", name: "2026학년도 1학기", startDate: "2026-03-02", endDate: "2026-06-19" },
-    { id: "sem2", name: "2026학년도 여름계절학기", startDate: "2026-06-22", endDate: "2026-07-10" },
-    { id: "sem3", name: "2026학년도 2학기", startDate: "2026-09-01", endDate: "2026-12-18" },
-    { id: "sem4", name: "2026학년도 겨울계절학기", startDate: "2026-12-21", endDate: "2027-01-15" }
-  ];
-  function loadSemesters() {
-    try {
-      var raw = localStorage.getItem("academicSemesters");
-      SEMESTERS = raw ? JSON.parse(raw) : SEMESTERS;
-    } catch (e) {}
-  }
-  function saveSemesters() {
-    try { localStorage.setItem("academicSemesters", JSON.stringify(SEMESTERS)); } catch (e) {}
-  }
-  loadSemesters();
-
-  /* ================= 유틸 ================= */
-  function allRoomsFlat() {
-    var list = [];
-    Object.keys(BUILDINGS).forEach(function (b) {
-      var floorKeys = Object.keys(BUILDINGS[b].floors).sort(function (a, c) { return parseInt(a, 10) - parseInt(c, 10); });
-      floorKeys.forEach(function (f) {
-        BUILDINGS[b].floors[f].forEach(function (r) {
-          list.push({ b: b, floor: f, r: r });
-        });
-      });
-    });
-    return list;
+  async function loadRooms() {
+    var res = await supabaseClient
+      .from('rooms')
+      .select('id, floor, room_no, room_name, capacity, status, manager_id, room_types(name), room_equipment(equipment(name)), manager:assistants(name)')
+      .eq('building_id', MY_BUILDING_ID)
+      .eq('is_active', true)
+      .order('floor').order('room_no');
+    ROOMS = res.data || [];
   }
 
-  function managerOfRoom(b, r) {
-    var found = null;
-    Object.keys(MANAGERS).forEach(function (id) {
-      MANAGERS[id].rooms.forEach(function (rm) {
-        if (rm.b === b && rm.r === r) found = id;
-      });
-    });
-    return found;
+  async function loadMidAdmins() {
+    var res = await supabaseClient.from('assistants').select('id, name, is_active').eq('role', 'mid_admin').eq('building_id', MY_BUILDING_ID).order('name');
+    MID_ADMINS = res.data || [];
+    var res2 = await supabaseClient.from('assistants').select('id, name').eq('role', 'assistant').order('name');
+    UNASSIGNED_ASSISTANTS = res2.data || [];
+  }
+
+  async function loadSemesters() {
+    var res = await supabaseClient.from('semesters').select('id, name, start_date, end_date').order('start_date', { ascending: false });
+    SEMESTERS = res.data || [];
   }
 
   /* ================= 탭 전환 ================= */
-  document.querySelectorAll(".tab-btn").forEach(function (btn) {
-    btn.addEventListener("click", function () {
-      document.querySelectorAll(".tab-btn").forEach(function (b) { b.classList.toggle("active", b === btn); });
-      var tab = btn.getAttribute("data-tab");
-      document.getElementById("tabRooms").classList.toggle("active", tab === "rooms");
-      document.getElementById("tabManagers").classList.toggle("active", tab === "managers");
-      document.getElementById("tabSemesters").classList.toggle("active", tab === "semesters");
+  document.querySelectorAll('.tab-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      document.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.toggle('active', b === btn); });
+      var tab = btn.getAttribute('data-tab');
+      document.getElementById('tabRooms').classList.toggle('active', tab === 'rooms');
+      document.getElementById('tabManagers').classList.toggle('active', tab === 'managers');
+      document.getElementById('tabSemesters').classList.toggle('active', tab === 'semesters');
     });
   });
 
   /* ================= 강의실 관리 탭 ================= */
-  var roomBuildingFilter = document.getElementById("roomBuildingFilter");
-  (function initBuildingFilter() {
-    var html = '<option value="">전체 건물</option>';
-    Object.keys(BUILDINGS).forEach(function (b) { html += '<option value="' + b + '">' + b + "</option>"; });
-    roomBuildingFilter.innerHTML = html;
-  })();
-  roomBuildingFilter.addEventListener("change", renderRoomTable);
+  function managerNameOf(room) { return room.manager ? room.manager.name : null; }
 
   function renderRoomTable() {
-    var filterB = roomBuildingFilter.value;
-    var rooms = allRoomsFlat().filter(function (rm) { return !filterB || rm.b === filterB; });
-    var tbody = document.getElementById("roomTableBody");
+    var tbody = document.getElementById('roomTableBody');
+    document.getElementById('roomCountLabel').textContent = ROOMS.length;
+    document.getElementById('roomEmptyState').style.display = ROOMS.length ? 'none' : 'block';
 
-    document.getElementById("roomCountLabel").textContent = rooms.length;
-    document.getElementById("roomEmptyState").style.display = rooms.length ? "none" : "block";
+    tbody.innerHTML = ROOMS.map(function (rm) {
+      var equipNames = (rm.room_equipment || []).map(function (re) { return re.equipment.name; }).join(', ') || '-';
+      var mgrName = managerNameOf(rm);
+      var mgrChip = mgrName ? '<span class="manager-chip">' + escapeHtml(mgrName) + '</span>' : '<span class="manager-chip none">미배정</span>';
+      var statusSelect = '<select class="status-select st-' + rm.status + '" data-status-room="' + rm.id + '">' +
+        Object.keys(STATUS_LABELS).map(function (s) { return '<option value="' + s + '"' + (s === rm.status ? ' selected' : '') + '>' + STATUS_LABELS[s] + '</option>'; }).join('') + '</select>';
+      return '<tr>' +
+        '<td>' + floorLabelText(rm.floor) + '</td>' +
+        '<td class="cell-room">' + escapeHtml(rm.room_name) + '</td>' +
+        '<td>' + (rm.room_types ? escapeHtml(rm.room_types.name) : '-') + '</td>' +
+        '<td>' + rm.capacity + '명</td>' +
+        '<td>' + escapeHtml(equipNames) + '</td>' +
+        '<td>' + statusSelect + '</td>' +
+        '<td>' + mgrChip + '</td>' +
+        '<td style="text-align:right;"><button type="button" class="icon-btn danger" data-hide-room="' + rm.id + '">숨기기</button></td>' +
+        '</tr>';
+    }).join('');
 
-    tbody.innerHTML = rooms.map(function (rm) {
-      var detail = getRoomDetail(rm.b, rm.r);
-      var mgrId = managerOfRoom(rm.b, rm.r);
-      var mgrChip = mgrId
-        ? '<span class="manager-chip">' + MANAGERS[mgrId].name + "</span>"
-        : '<span class="manager-chip none">미배정</span>';
-      var status = getRoomStatus(rm.b, rm.r);
-      var statusSelect = '<select class="status-select st-' + status + '" data-status-b="' + rm.b + '" data-status-r="' + rm.r + '">' +
-        Object.keys(STATUS_LABELS).map(function (s) {
-          return '<option value="' + s + '"' + (s === status ? " selected" : "") + ">" + STATUS_LABELS[s] + "</option>";
-        }).join("") + "</select>";
-      return "<tr>" +
-        "<td>" + rm.b + "</td>" +
-        "<td>" + rm.floor + "층</td>" +
-        '<td class="cell-room">' + roomLabel(rm.b, rm.r) + "호</td>" +
-        "<td>" + detail.capacity + "</td>" +
-        "<td>" + detail.equip + "</td>" +
-        "<td>" + statusSelect + "</td>" +
-        "<td>" + mgrChip + "</td>" +
-        '<td style="text-align:right;"><button type="button" class="icon-btn danger" data-del-b="' + rm.b + '" data-del-r="' + rm.r + '">삭제</button></td>' +
-        "</tr>";
-    }).join("");
-
-    tbody.querySelectorAll("[data-del-b]").forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        openDeleteRoomModal(btn.getAttribute("data-del-b"), btn.getAttribute("data-del-r"));
+    tbody.querySelectorAll('[data-status-room]').forEach(function (sel) {
+      sel.addEventListener('change', async function () {
+        var roomId = parseInt(sel.getAttribute('data-status-room'), 10);
+        var res = await supabaseClient.from('rooms').update({ status: sel.value }).eq('id', roomId);
+        if (res.error) { alert('상태 변경 실패: ' + res.error.message); return; }
+        sel.className = 'status-select st-' + sel.value;
+        var room = ROOMS.filter(function (r) { return r.id === roomId; })[0];
+        if (room) room.status = sel.value;
       });
     });
-    tbody.querySelectorAll("[data-status-b]").forEach(function (sel) {
-      sel.addEventListener("change", function () {
-        var b = sel.getAttribute("data-status-b"), r = sel.getAttribute("data-status-r");
-        setRoomStatus(b, r, sel.value);
-        sel.className = "status-select st-" + sel.value;
-      });
+    tbody.querySelectorAll('[data-hide-room]').forEach(function (btn) {
+      btn.addEventListener('click', function () { openDeleteRoomModal(parseInt(btn.getAttribute('data-hide-room'), 10)); });
     });
   }
+
+  /* 헤더의 건물 필터/카운트는 지금은 항상 내 담당 건물 한 곳만 표시 (final_admin은 건물 하나에만 스코프됨) */
+  (function hideBuildingFilter() {
+    var sel = document.getElementById('roomBuildingFilter');
+    sel.style.display = 'none';
+  })();
 
   /* ---------- 강의실 추가 ---------- */
-  var addRoomModalOverlay = document.getElementById("addRoomModalOverlay");
-  var arBuilding = document.getElementById("arBuilding");
-  var arFloor = document.getElementById("arFloor");
-
-  (function initAddRoomSelects() {
-    arBuilding.innerHTML = Object.keys(BUILDINGS).map(function (b) { return '<option value="' + b + '">' + b + "</option>"; }).join("");
-    renderFloorOptions();
-  })();
-  arBuilding.addEventListener("change", renderFloorOptions);
-  function renderFloorOptions() {
-    var floorKeys = Object.keys(BUILDINGS[arBuilding.value].floors).sort(function (a, c) { return parseInt(a, 10) - parseInt(c, 10); });
-    arFloor.innerHTML = floorKeys.map(function (f) { return '<option value="' + f + '">' + f + "층</option>"; }).join("");
-  }
-
-  document.getElementById("openAddRoomBtn").addEventListener("click", function () {
-    document.getElementById("arRoomNumber").value = "";
-    document.getElementById("arCapacity").value = "";
-    document.getElementById("arEquip").value = "";
-    document.getElementById("arErrorBox").classList.remove("show");
-    addRoomModalOverlay.classList.add("show");
+  var addRoomModalOverlay = document.getElementById('addRoomModalOverlay');
+  document.getElementById('openAddRoomBtn').addEventListener('click', function () {
+    document.getElementById('arFloor').value = '';
+    document.getElementById('arRoomNumber').value = '';
+    document.getElementById('arRoomName').value = '';
+    document.getElementById('arCapacity').value = '';
+    document.getElementById('arErrorBox').classList.remove('show');
+    addRoomModalOverlay.classList.add('show');
   });
-  document.getElementById("arCancelBtn").addEventListener("click", function () { addRoomModalOverlay.classList.remove("show"); });
+  document.getElementById('arCancelBtn').addEventListener('click', function () { addRoomModalOverlay.classList.remove('show'); });
 
-  document.getElementById("arSaveBtn").addEventListener("click", function () {
-    var b = arBuilding.value, floor = arFloor.value;
-    var rNum = document.getElementById("arRoomNumber").value.trim();
-    var errBox = document.getElementById("arErrorBox");
+  document.getElementById('arSaveBtn').addEventListener('click', async function () {
+    var errBox = document.getElementById('arErrorBox');
+    var floor = parseInt(document.getElementById('arFloor').value, 10);
+    var roomNo = document.getElementById('arRoomNumber').value.trim();
+    var roomName = document.getElementById('arRoomName').value.trim();
+    var roomTypeId = parseInt(document.getElementById('arRoomType').value, 10);
+    var capacity = parseInt(document.getElementById('arCapacity').value, 10);
 
-    if (!rNum) { errBox.textContent = "호실 번호를 입력해주세요."; errBox.classList.add("show"); return; }
-    if (BUILDINGS[b].floors[floor].indexOf(rNum) !== -1) {
-      errBox.textContent = "이미 존재하는 호실 번호예요."; errBox.classList.add("show"); return;
+    if (isNaN(floor)) { errBox.textContent = '층을 숫자로 입력해주세요.'; errBox.classList.add('show'); return; }
+    if (!roomNo) { errBox.textContent = '호실 번호를 입력해주세요.'; errBox.classList.add('show'); return; }
+    if (!roomName) { errBox.textContent = '강의실명을 입력해주세요.'; errBox.classList.add('show'); return; }
+    if (!capacity) { errBox.textContent = '수용 인원을 입력해주세요.'; errBox.classList.add('show'); return; }
+
+    var res = await supabaseClient.from('rooms').insert({
+      building_id: MY_BUILDING_ID, floor: floor, room_no: roomNo, room_name: roomName,
+      room_type_id: roomTypeId, capacity: capacity
+    });
+    if (res.error) {
+      errBox.textContent = res.error.message.indexOf('duplicate') !== -1 ? '이미 존재하는 호실 번호예요.' : ('추가 실패: ' + res.error.message);
+      errBox.classList.add('show');
+      return;
     }
-
-    BUILDINGS[b].floors[floor].push(rNum);
-    ROOM_DETAILS[roomKey(b, rNum)] = {
-      capacity: document.getElementById("arCapacity").value.trim() || "30명",
-      equip: document.getElementById("arEquip").value.trim() || "-"
-    };
-
-    addRoomModalOverlay.classList.remove("show");
+    addRoomModalOverlay.classList.remove('show');
+    await loadRooms();
     renderRoomTable();
   });
 
-  /* ---------- 강의실 삭제 ---------- */
-  var deleteRoomModalOverlay = document.getElementById("deleteRoomModalOverlay");
-  var pendingDeleteRoom = null;
+  /* ---------- 강의실 숨기기 ---------- */
+  var deleteRoomModalOverlay = document.getElementById('deleteRoomModalOverlay');
+  var pendingHideRoomId = null;
 
-  function openDeleteRoomModal(b, r) {
-    pendingDeleteRoom = { b: b, r: r };
-    document.getElementById("deleteRoomDesc").textContent =
-      roomLabel(b, r) + "호를 삭제하면 되돌릴 수 없어요. 해당 강의실의 예약 데이터도 함께 표시되지 않게 돼요.";
-    deleteRoomModalOverlay.classList.add("show");
+  function openDeleteRoomModal(roomId) {
+    pendingHideRoomId = roomId;
+    var room = ROOMS.filter(function (r) { return r.id === roomId; })[0];
+    document.getElementById('deleteRoomDesc').textContent =
+      (room ? escapeHtml(room.room_name) : '이 강의실') + '을(를) 목록에서 숨깁니다. 기존 예약 기록은 그대로 보존돼요.';
+    deleteRoomModalOverlay.classList.add('show');
   }
-  document.getElementById("deleteRoomCancelBtn").addEventListener("click", function () { deleteRoomModalOverlay.classList.remove("show"); });
-  document.getElementById("deleteRoomConfirmBtn").addEventListener("click", function () {
-    if (!pendingDeleteRoom) return;
-    var b = pendingDeleteRoom.b, r = pendingDeleteRoom.r;
-    var floorKeys = Object.keys(BUILDINGS[b].floors);
-    floorKeys.forEach(function (f) {
-      BUILDINGS[b].floors[f] = BUILDINGS[b].floors[f].filter(function (rr) { return rr !== r; });
-    });
-    Object.keys(MANAGERS).forEach(function (id) {
-      MANAGERS[id].rooms = MANAGERS[id].rooms.filter(function (rm) { return !(rm.b === b && rm.r === r); });
-    });
-    delete ROOM_STATUS[roomKey(b, r)];
-    saveRoomStatus();
-    deleteRoomModalOverlay.classList.remove("show");
+  document.getElementById('deleteRoomCancelBtn').addEventListener('click', function () { deleteRoomModalOverlay.classList.remove('show'); });
+  document.getElementById('deleteRoomConfirmBtn').addEventListener('click', async function () {
+    if (!pendingHideRoomId) return;
+    var res = await supabaseClient.from('rooms').update({ is_active: false }).eq('id', pendingHideRoomId);
+    deleteRoomModalOverlay.classList.remove('show');
+    if (res.error) { alert('숨기기 실패: ' + res.error.message); return; }
+    pendingHideRoomId = null;
+    await loadRooms();
     renderRoomTable();
-    renderManagerGrid();
   });
 
   /* ================= 중간관리자 관리 탭 ================= */
   function renderManagerGrid() {
-    var grid = document.getElementById("managerGrid");
-    var ids = Object.keys(MANAGERS);
-    document.getElementById("managerCountLabel").textContent = ids.length;
+    var grid = document.getElementById('managerGrid');
+    document.getElementById('managerCountLabel').textContent = MID_ADMINS.length;
 
-    if (!ids.length) {
+    if (!MID_ADMINS.length) {
       grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;">지정된 중간관리자가 없어요.</div>';
       return;
     }
 
-    grid.innerHTML = ids.map(function (id) {
-      var m = MANAGERS[id];
-      var chips = m.rooms.length
-        ? m.rooms.map(function (rm) { return '<span class="manager-chip">' + roomLabel(rm.b, rm.r) + "호</span>"; }).join("")
+    grid.innerHTML = MID_ADMINS.map(function (m) {
+      var myRooms = ROOMS.filter(function (r) { return r.manager_id === m.id; });
+      var chips = myRooms.length
+        ? myRooms.map(function (r) { return '<span class="manager-chip">' + escapeHtml(r.room_name) + '</span>'; }).join('')
         : '<span class="manager-chip none">담당 강의실 없음</span>';
       return '<div class="manager-card">' +
         '<div class="manager-card-head">' +
-          '<div class="manager-avatar">' + m.name.charAt(0) + '</div>' +
-          '<div><div class="manager-name">' + m.name + '</div><div class="manager-email">' + m.email + '</div></div>' +
+        '<div class="manager-avatar">' + escapeHtml(m.name.charAt(0)) + '</div>' +
+        '<div><div class="manager-name">' + escapeHtml(m.name) + '</div></div>' +
         '</div>' +
-        '<div class="manager-rooms-label">담당 강의실 (' + m.rooms.length + ')</div>' +
+        '<div class="manager-rooms-label">담당 강의실 (' + myRooms.length + ')</div>' +
         '<div class="manager-rooms-chips">' + chips + '</div>' +
         '<div class="manager-card-actions">' +
-          '<button type="button" class="icon-btn" data-perm-id="' + id + '">🔑 강의실 권한 수정</button>' +
-          '<button type="button" class="icon-btn danger" data-del-mgr="' + id + '">계정 삭제</button>' +
-        '</div>' +
-        '</div>';
-    }).join("");
+        '<button type="button" class="icon-btn" data-perm-id="' + m.id + '">🔑 강의실 권한 수정</button>' +
+        '<button type="button" class="icon-btn danger" data-del-mgr="' + m.id + '">담당 해제</button>' +
+        '</div></div>';
+    }).join('');
 
-    grid.querySelectorAll("[data-perm-id]").forEach(function (btn) {
-      btn.addEventListener("click", function () { openEditPermModal(btn.getAttribute("data-perm-id")); });
+    grid.querySelectorAll('[data-perm-id]').forEach(function (btn) {
+      btn.addEventListener('click', function () { openEditPermModal(btn.getAttribute('data-perm-id')); });
     });
-    grid.querySelectorAll("[data-del-mgr]").forEach(function (btn) {
-      btn.addEventListener("click", function () { openDeleteManagerModal(btn.getAttribute("data-del-mgr")); });
+    grid.querySelectorAll('[data-del-mgr]').forEach(function (btn) {
+      btn.addEventListener('click', function () { openDeleteManagerModal(btn.getAttribute('data-del-mgr')); });
     });
   }
 
-  /* ---------- 강의실 체크리스트 공통 렌더링 ---------- */
-  function buildRoomCheckListHTML(checkedSet, excludeManagerId) {
-    var html = "";
-    Object.keys(BUILDINGS).forEach(function (b) {
-      html += '<div class="rcl-building-name">' + b + "</div>";
-      var floorKeys = Object.keys(BUILDINGS[b].floors).sort(function (a, c) { return parseInt(a, 10) - parseInt(c, 10); });
-      floorKeys.forEach(function (f) {
-        BUILDINGS[b].floors[f].forEach(function (r) {
-          var key = roomKey(b, r);
-          var checked = checkedSet[key] ? " checked" : "";
-          var takenBy = managerOfRoom(b, r);
-          var takenLabel = "";
-          if (takenBy && takenBy !== excludeManagerId) takenLabel = '<span class="rcl-taken">' + MANAGERS[takenBy].name + " 담당중</span>";
-          html += '<label class="rcl-item"><input type="checkbox" data-b="' + b + '" data-r="' + r + '"' + checked + ">" +
-            roomLabel(b, r) + "호" + takenLabel + "</label>";
-        });
-      });
-    });
-    return html;
+  function buildRoomCheckListHTML(checkedIds, excludeManagerId) {
+    return ROOMS.map(function (r) {
+      var checked = checkedIds.indexOf(r.id) !== -1 ? ' checked' : '';
+      var takenLabel = '';
+      if (r.manager_id && r.manager_id !== excludeManagerId) takenLabel = '<span class="rcl-taken">' + escapeHtml(managerNameOf(r) || '') + ' 담당중</span>';
+      return '<label class="rcl-item"><input type="checkbox" data-room-id="' + r.id + '"' + checked + '>' + escapeHtml(r.room_name) + takenLabel + '</label>';
+    }).join('');
   }
 
-  /* ---------- 중간관리자 지정 ---------- */
-  var addManagerModalOverlay = document.getElementById("addManagerModalOverlay");
-  document.getElementById("openAddManagerBtn").addEventListener("click", function () {
-    document.getElementById("amName").value = "";
-    document.getElementById("amEmail").value = "";
-    document.getElementById("amErrorBox").classList.remove("show");
-    document.getElementById("amRoomCheckList").innerHTML = buildRoomCheckListHTML({}, null);
-    addManagerModalOverlay.classList.add("show");
+  /* ---------- 중간관리자 지정 (기존 assistant 승격) ---------- */
+  var addManagerModalOverlay = document.getElementById('addManagerModalOverlay');
+  document.getElementById('openAddManagerBtn').addEventListener('click', function () {
+    var sel = document.getElementById('amAssistantSelect');
+    if (!UNASSIGNED_ASSISTANTS.length) {
+      sel.innerHTML = '<option value="">승격 가능한 계정이 없습니다</option>';
+    } else {
+      sel.innerHTML = UNASSIGNED_ASSISTANTS.map(function (a) { return '<option value="' + a.id + '">' + escapeHtml(a.name) + '</option>'; }).join('');
+    }
+    document.getElementById('amErrorBox').classList.remove('show');
+    document.getElementById('amRoomCheckList').innerHTML = buildRoomCheckListHTML([], null);
+    addManagerModalOverlay.classList.add('show');
   });
-  document.getElementById("amCancelBtn").addEventListener("click", function () { addManagerModalOverlay.classList.remove("show"); });
+  document.getElementById('amCancelBtn').addEventListener('click', function () { addManagerModalOverlay.classList.remove('show'); });
 
-  document.getElementById("amSaveBtn").addEventListener("click", function () {
-    var name = document.getElementById("amName").value.trim();
-    var email = document.getElementById("amEmail").value.trim();
-    var errBox = document.getElementById("amErrorBox");
+  document.getElementById('amSaveBtn').addEventListener('click', async function () {
+    var errBox = document.getElementById('amErrorBox');
+    var assistantId = document.getElementById('amAssistantSelect').value;
+    if (!assistantId) { errBox.textContent = '승격시킬 계정을 선택해주세요.'; errBox.classList.add('show'); return; }
 
-    if (!name || !email) { errBox.textContent = "이름과 이메일을 모두 입력해주세요."; errBox.classList.add("show"); return; }
+    var checked = document.querySelectorAll('#amRoomCheckList input:checked');
+    var roomIds = Array.prototype.slice.call(checked).map(function (cb) { return parseInt(cb.getAttribute('data-room-id'), 10); });
 
-    var checked = document.querySelectorAll("#amRoomCheckList input:checked");
-    var rooms = [];
-    checked.forEach(function (cb) { rooms.push({ b: cb.getAttribute("data-b"), r: cb.getAttribute("data-r") }); });
+    var updateRes = await supabaseClient.from('assistants').update({ role: 'mid_admin', building_id: MY_BUILDING_ID }).eq('id', assistantId);
+    if (updateRes.error) { errBox.textContent = '승격 실패: ' + updateRes.error.message; errBox.classList.add('show'); return; }
 
-    var newId = "mgr" + (managerIdSeq++);
-    MANAGERS[newId] = { name: name, email: email, rooms: rooms };
+    if (roomIds.length) {
+      var roomRes = await supabaseClient.from('rooms').update({ manager_id: assistantId }).in('id', roomIds);
+      if (roomRes.error) { errBox.textContent = '강의실 배정 중 일부 실패: ' + roomRes.error.message; errBox.classList.add('show'); }
+    }
 
-    addManagerModalOverlay.classList.remove("show");
-    renderManagerGrid();
-    renderRoomTable();
+    addManagerModalOverlay.classList.remove('show');
+    await refreshAll();
   });
 
   /* ---------- 강의실 권한 수정 ---------- */
-  var editPermModalOverlay = document.getElementById("editPermModalOverlay");
+  var editPermModalOverlay = document.getElementById('editPermModalOverlay');
   var currentEditPermId = null;
 
   function openEditPermModal(id) {
     currentEditPermId = id;
-    var m = MANAGERS[id];
-    document.getElementById("editPermDesc").textContent = m.name + "님이 담당할 강의실을 체크/해제해주세요.";
-    var checkedSet = {};
-    m.rooms.forEach(function (rm) { checkedSet[roomKey(rm.b, rm.r)] = true; });
-    document.getElementById("epRoomCheckList").innerHTML = buildRoomCheckListHTML(checkedSet, id);
-    editPermModalOverlay.classList.add("show");
+    var m = MID_ADMINS.filter(function (x) { return x.id === id; })[0];
+    document.getElementById('editPermDesc').textContent = (m ? m.name : '') + '님이 담당할 강의실을 체크/해제해주세요.';
+    var checkedIds = ROOMS.filter(function (r) { return r.manager_id === id; }).map(function (r) { return r.id; });
+    document.getElementById('epRoomCheckList').innerHTML = buildRoomCheckListHTML(checkedIds, id);
+    editPermModalOverlay.classList.add('show');
   }
-  document.getElementById("epCancelBtn").addEventListener("click", function () { editPermModalOverlay.classList.remove("show"); });
+  document.getElementById('epCancelBtn').addEventListener('click', function () { editPermModalOverlay.classList.remove('show'); });
 
-  document.getElementById("epSaveBtn").addEventListener("click", function () {
+  document.getElementById('epSaveBtn').addEventListener('click', async function () {
     if (!currentEditPermId) return;
-    var checked = document.querySelectorAll("#epRoomCheckList input:checked");
-    var rooms = [];
-    checked.forEach(function (cb) { rooms.push({ b: cb.getAttribute("data-b"), r: cb.getAttribute("data-r") }); });
-    MANAGERS[currentEditPermId].rooms = rooms;
+    var checked = document.querySelectorAll('#epRoomCheckList input:checked');
+    var newIds = Array.prototype.slice.call(checked).map(function (cb) { return parseInt(cb.getAttribute('data-room-id'), 10); });
+    var oldIds = ROOMS.filter(function (r) { return r.manager_id === currentEditPermId; }).map(function (r) { return r.id; });
 
-    editPermModalOverlay.classList.remove("show");
-    renderManagerGrid();
-    renderRoomTable();
+    var toAdd = newIds.filter(function (id) { return oldIds.indexOf(id) === -1; });
+    var toRemove = oldIds.filter(function (id) { return newIds.indexOf(id) === -1; });
+
+    if (toAdd.length) await supabaseClient.from('rooms').update({ manager_id: currentEditPermId }).in('id', toAdd);
+    if (toRemove.length) await supabaseClient.from('rooms').update({ manager_id: null }).in('id', toRemove);
+
+    editPermModalOverlay.classList.remove('show');
+    await refreshAll();
   });
 
-  /* ---------- 중간관리자 삭제 ---------- */
-  var deleteManagerModalOverlay = document.getElementById("deleteManagerModalOverlay");
+  /* ---------- 중간관리자 담당 해제 ---------- */
+  var deleteManagerModalOverlay = document.getElementById('deleteManagerModalOverlay');
   var pendingDeleteManagerId = null;
 
   function openDeleteManagerModal(id) {
     pendingDeleteManagerId = id;
-    document.getElementById("deleteManagerDesc").textContent =
-      MANAGERS[id].name + " 계정을 삭제하면 담당하던 강의실 " + MANAGERS[id].rooms.length + "개가 모두 미배정 상태가 돼요.";
-    deleteManagerModalOverlay.classList.add("show");
+    var m = MID_ADMINS.filter(function (x) { return x.id === id; })[0];
+    var roomCount = ROOMS.filter(function (r) { return r.manager_id === id; }).length;
+    document.getElementById('deleteManagerDesc').textContent =
+      (m ? m.name : '') + '님 담당을 해제하면 일반 조교 계정으로 돌아가고, 담당하던 강의실 ' + roomCount + '개가 모두 미배정 상태가 돼요.';
+    deleteManagerModalOverlay.classList.add('show');
   }
-  document.getElementById("deleteManagerCancelBtn").addEventListener("click", function () { deleteManagerModalOverlay.classList.remove("show"); });
-  document.getElementById("deleteManagerConfirmBtn").addEventListener("click", function () {
+  document.getElementById('deleteManagerCancelBtn').addEventListener('click', function () { deleteManagerModalOverlay.classList.remove('show'); });
+  document.getElementById('deleteManagerConfirmBtn').addEventListener('click', async function () {
     if (!pendingDeleteManagerId) return;
-    delete MANAGERS[pendingDeleteManagerId];
-    deleteManagerModalOverlay.classList.remove("show");
-    renderManagerGrid();
-    renderRoomTable();
+    await supabaseClient.from('rooms').update({ manager_id: null }).eq('manager_id', pendingDeleteManagerId);
+    var res = await supabaseClient.from('assistants').update({ role: 'assistant', building_id: null }).eq('id', pendingDeleteManagerId);
+    deleteManagerModalOverlay.classList.remove('show');
+    if (res.error) { alert('해제 실패: ' + res.error.message); return; }
+    pendingDeleteManagerId = null;
+    await refreshAll();
   });
 
   /* ================= 학기 관리 탭 ================= */
   function renderSemesterTable() {
-    var tbody = document.getElementById("semesterTableBody");
-    document.getElementById("semesterCountLabel").textContent = SEMESTERS.length;
-    document.getElementById("semesterEmptyState").style.display = SEMESTERS.length ? "none" : "block";
+    var tbody = document.getElementById('semesterTableBody');
+    document.getElementById('semesterCountLabel').textContent = SEMESTERS.length;
+    document.getElementById('semesterEmptyState').style.display = SEMESTERS.length ? 'none' : 'block';
 
     tbody.innerHTML = SEMESTERS.map(function (s) {
-      return "<tr>" +
-        '<td class="cell-room">' + s.name + "</td>" +
-        "<td>" + s.startDate + "</td>" +
-        "<td>" + s.endDate + "</td>" +
+      return '<tr>' +
+        '<td class="cell-room">' + escapeHtml(s.name) + '</td>' +
+        '<td>' + s.start_date + '</td>' +
+        '<td>' + s.end_date + '</td>' +
         '<td style="text-align:right;">' +
-          '<button type="button" class="icon-btn" data-edit-sem="' + s.id + '" style="margin-right:6px;">수정</button>' +
-          '<button type="button" class="icon-btn danger" data-del-sem="' + s.id + '">삭제</button>' +
-        "</td>" +
-        "</tr>";
-    }).join("");
+        '<button type="button" class="icon-btn" data-edit-sem="' + s.id + '" style="margin-right:6px;">수정</button>' +
+        '<button type="button" class="icon-btn danger" data-del-sem="' + s.id + '">삭제</button>' +
+        '</td></tr>';
+    }).join('');
 
-    tbody.querySelectorAll("[data-del-sem]").forEach(function (btn) {
-      btn.addEventListener("click", function () { openDeleteSemesterModal(btn.getAttribute("data-del-sem")); });
+    tbody.querySelectorAll('[data-del-sem]').forEach(function (btn) {
+      btn.addEventListener('click', function () { openDeleteSemesterModal(parseInt(btn.getAttribute('data-del-sem'), 10)); });
     });
-    tbody.querySelectorAll("[data-edit-sem]").forEach(function (btn) {
-      btn.addEventListener("click", function () { openEditSemesterModal(btn.getAttribute("data-edit-sem")); });
+    tbody.querySelectorAll('[data-edit-sem]').forEach(function (btn) {
+      btn.addEventListener('click', function () { openEditSemesterModal(parseInt(btn.getAttribute('data-edit-sem'), 10)); });
     });
   }
 
-  var addSemesterModalOverlay = document.getElementById("addSemesterModalOverlay");
+  var addSemesterModalOverlay = document.getElementById('addSemesterModalOverlay');
   var pendingEditSemesterId = null;
 
-  document.getElementById("openAddSemesterBtn").addEventListener("click", function () {
+  document.getElementById('openAddSemesterBtn').addEventListener('click', function () {
     pendingEditSemesterId = null;
-    document.getElementById("asModalTitle").textContent = "학기 추가";
-    document.getElementById("asModalDesc").textContent = '모든 중간관리자의 "정기수업 등록" 화면에 동일하게 노출돼요.';
-    document.getElementById("asSaveBtn").textContent = "추가";
-    document.getElementById("asName").value = "";
-    document.getElementById("asStartDate").value = "";
-    document.getElementById("asEndDate").value = "";
-    document.getElementById("asErrorBox").classList.remove("show");
-    addSemesterModalOverlay.classList.add("show");
+    document.getElementById('asModalTitle').textContent = '학기 추가';
+    document.getElementById('asModalDesc').textContent = '모든 중간관리자의 "정기수업 등록" 화면에 동일하게 노출돼요.';
+    document.getElementById('asSaveBtn').textContent = '추가';
+    document.getElementById('asName').value = '';
+    document.getElementById('asStartDate').value = '';
+    document.getElementById('asEndDate').value = '';
+    document.getElementById('asErrorBox').classList.remove('show');
+    addSemesterModalOverlay.classList.add('show');
   });
-  document.getElementById("asCancelBtn").addEventListener("click", function () { addSemesterModalOverlay.classList.remove("show"); });
+  document.getElementById('asCancelBtn').addEventListener('click', function () { addSemesterModalOverlay.classList.remove('show'); });
 
   function openEditSemesterModal(id) {
     var s = SEMESTERS.filter(function (x) { return x.id === id; })[0];
     if (!s) return;
     pendingEditSemesterId = id;
-    document.getElementById("asModalTitle").textContent = "학기 수정";
-    document.getElementById("asModalDesc").textContent = "수정 내용은 모든 중간관리자 화면에 즉시 반영돼요.";
-    document.getElementById("asSaveBtn").textContent = "저장";
-    document.getElementById("asName").value = s.name;
-    document.getElementById("asStartDate").value = s.startDate;
-    document.getElementById("asEndDate").value = s.endDate;
-    document.getElementById("asErrorBox").classList.remove("show");
-    addSemesterModalOverlay.classList.add("show");
+    document.getElementById('asModalTitle').textContent = '학기 수정';
+    document.getElementById('asModalDesc').textContent = '수정 내용은 모든 중간관리자 화면에 즉시 반영돼요.';
+    document.getElementById('asSaveBtn').textContent = '저장';
+    document.getElementById('asName').value = s.name;
+    document.getElementById('asStartDate').value = s.start_date;
+    document.getElementById('asEndDate').value = s.end_date;
+    document.getElementById('asErrorBox').classList.remove('show');
+    addSemesterModalOverlay.classList.add('show');
   }
 
-  document.getElementById("asSaveBtn").addEventListener("click", function () {
-    var name = document.getElementById("asName").value.trim();
-    var start = document.getElementById("asStartDate").value;
-    var end = document.getElementById("asEndDate").value;
-    var errBox = document.getElementById("asErrorBox");
+  document.getElementById('asSaveBtn').addEventListener('click', async function () {
+    var name = document.getElementById('asName').value.trim();
+    var start = document.getElementById('asStartDate').value;
+    var end = document.getElementById('asEndDate').value;
+    var errBox = document.getElementById('asErrorBox');
 
-    if (!name) { errBox.textContent = "학기명을 입력해주세요."; errBox.classList.add("show"); return; }
-    if (!start || !end) { errBox.textContent = "시작일과 종료일을 모두 선택해주세요."; errBox.classList.add("show"); return; }
-    if (start > end) { errBox.textContent = "종료일은 시작일보다 빠를 수 없어요."; errBox.classList.add("show"); return; }
+    if (!name) { errBox.textContent = '학기명을 입력해주세요.'; errBox.classList.add('show'); return; }
+    if (!start || !end) { errBox.textContent = '시작일과 종료일을 모두 선택해주세요.'; errBox.classList.add('show'); return; }
+    if (start > end) { errBox.textContent = '종료일은 시작일보다 빠를 수 없어요.'; errBox.classList.add('show'); return; }
 
+    var res;
     if (pendingEditSemesterId) {
-      var target = SEMESTERS.filter(function (s) { return s.id === pendingEditSemesterId; })[0];
-      if (target) { target.name = name; target.startDate = start; target.endDate = end; }
+      res = await supabaseClient.from('semesters').update({ name: name, start_date: start, end_date: end }).eq('id', pendingEditSemesterId);
     } else {
-      SEMESTERS.push({ id: "sem" + (semesterIdSeq++), name: name, startDate: start, endDate: end });
+      res = await supabaseClient.from('semesters').insert({ name: name, start_date: start, end_date: end, created_by: CURRENT_USER.id });
     }
-    saveSemesters();
-    addSemesterModalOverlay.classList.remove("show");
+    if (res.error) { errBox.textContent = '저장 실패: ' + res.error.message; errBox.classList.add('show'); return; }
+
+    addSemesterModalOverlay.classList.remove('show');
+    await loadSemesters();
     renderSemesterTable();
   });
 
-  var deleteSemesterModalOverlay = document.getElementById("deleteSemesterModalOverlay");
+  var deleteSemesterModalOverlay = document.getElementById('deleteSemesterModalOverlay');
   var pendingDeleteSemesterId = null;
   function openDeleteSemesterModal(id) {
     pendingDeleteSemesterId = id;
     var s = SEMESTERS.filter(function (x) { return x.id === id; })[0];
-    document.getElementById("deleteSemesterDesc").textContent =
-      (s ? '"' + s.name + '"' : "이 학기") + "를 삭제하면 모든 중간관리자의 목록에서 즉시 사라져요.";
-    deleteSemesterModalOverlay.classList.add("show");
+    document.getElementById('deleteSemesterDesc').textContent =
+      (s ? '"' + s.name + '"' : '이 학기') + '를 삭제하면 모든 중간관리자의 목록에서 즉시 사라져요. (해당 학기로 등록된 정기수업이 있으면 삭제가 실패할 수 있어요)';
+    deleteSemesterModalOverlay.classList.add('show');
   }
-  document.getElementById("deleteSemesterCancelBtn").addEventListener("click", function () { deleteSemesterModalOverlay.classList.remove("show"); });
-  document.getElementById("deleteSemesterConfirmBtn").addEventListener("click", function () {
+  document.getElementById('deleteSemesterCancelBtn').addEventListener('click', function () { deleteSemesterModalOverlay.classList.remove('show'); });
+  document.getElementById('deleteSemesterConfirmBtn').addEventListener('click', async function () {
     if (!pendingDeleteSemesterId) return;
-    SEMESTERS = SEMESTERS.filter(function (s) { return s.id !== pendingDeleteSemesterId; });
-    saveSemesters();
-    deleteSemesterModalOverlay.classList.remove("show");
+    var res = await supabaseClient.from('semesters').delete().eq('id', pendingDeleteSemesterId);
+    deleteSemesterModalOverlay.classList.remove('show');
+    if (res.error) { alert('삭제 실패했습니다 (이 학기를 참조하는 정기수업이 있을 수 있어요): ' + res.error.message); return; }
+    pendingDeleteSemesterId = null;
+    await loadSemesters();
     renderSemesterTable();
   });
 
   /* ---------- 모달 바깥 클릭시 닫기 ---------- */
   [addRoomModalOverlay, deleteRoomModalOverlay, addManagerModalOverlay, editPermModalOverlay,
    deleteManagerModalOverlay, addSemesterModalOverlay, deleteSemesterModalOverlay].forEach(function (ov) {
-    ov.addEventListener("click", function (e) { if (e.target === ov) ov.classList.remove("show"); });
+    ov.addEventListener('click', function (e) { if (e.target === ov) ov.classList.remove('show'); });
   });
-
-  /* ---------- 로그아웃 ---------- */
-  document.getElementById("logoutBtn").addEventListener("click", function () {
-    window.location.href = "login.html";
-  });
-
-  /* ================= 초기 렌더 ================= */
-  renderRoomTable();
-  renderManagerGrid();
-  renderSemesterTable();
 </script>
 </body>
 </html>
