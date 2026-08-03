@@ -363,7 +363,7 @@ VALUES
 -- ============================================================
 -- 헬퍼 함수: 정책 안에서 assistants를 재귀적으로 조회하는 걸 피하려고 SECURITY DEFINER로 우회.
 -- (정책이 assistants를 직접 서브쿼리하면 그 서브쿼리도 같은 정책 평가를 다시 타게 되어 느려지거나 꼬일 수 있음)
-CREATE OR REPLACE FUNCTION public.current_role() RETURNS assistant_role
+CREATE OR REPLACE FUNCTION public.current_assistant_role() RETURNS assistant_role
 LANGUAGE sql SECURITY DEFINER SET search_path = public STABLE AS $$
     SELECT role FROM assistants WHERE id = auth.uid();
 $$;
@@ -393,7 +393,7 @@ ALTER TABLE favorites ENABLE ROW LEVEL SECURITY;
 
 -- ---- assistants: 본인 행 조회/수정, final_admin은 전체 조회 + role/건물 배정 수정 ----
 CREATE POLICY assistants_select ON assistants FOR SELECT
-    USING (id = auth.uid() OR current_role() = 'final_admin');
+    USING (id = auth.uid() OR current_assistant_role() = 'final_admin');
 
 CREATE POLICY assistants_update_self ON assistants FOR UPDATE
     USING (id = auth.uid());
@@ -402,14 +402,14 @@ CREATE POLICY assistants_update_self ON assistants FOR UPDATE
 -- WITH CHECK은 '수정 후 결과값'(반드시 내 건물 소속으로 남아야 함)을 검사합니다.
 -- 이렇게 안 나누면 building_id=NULL인 신규 가입자를 mid_admin으로 승격시킬 방법이 없습니다.
 CREATE POLICY assistants_manage_by_final_admin ON assistants FOR UPDATE
-    USING (current_role() = 'final_admin' AND (building_id IS NULL OR building_id = current_building_id()))
-    WITH CHECK (current_role() = 'final_admin' AND building_id = current_building_id());
+    USING (current_assistant_role() = 'final_admin' AND (building_id IS NULL OR building_id = current_building_id()))
+    WITH CHECK (current_assistant_role() = 'final_admin' AND building_id = current_building_id());
 
 -- ---- buildings: 전체 조회 가능, 수정은 자기 건물만 final_admin ----
 CREATE POLICY buildings_select ON buildings FOR SELECT USING (TRUE);
 
 CREATE POLICY buildings_update_by_final_admin ON buildings FOR UPDATE
-    USING (current_role() = 'final_admin' AND id = current_building_id());
+    USING (current_assistant_role() = 'final_admin' AND id = current_building_id());
 -- 새 건물 추가(INSERT)는 final_admin이 자기 건물이 아직 없는 상태라 이 정책으론 못 만듭니다.
 -- 지금은 건물 단위 권한만 있고 총괄 관리자가 없기로 하셨으니, 신규 건물 추가는 서비스 롤(백엔드/콘솔)에서
 -- 수동으로 하고 그 다음 담당 final_admin을 assistants.building_id로 연결하는 흐름을 권장합니다.
@@ -417,30 +417,30 @@ CREATE POLICY buildings_update_by_final_admin ON buildings FOR UPDATE
 -- ---- room_types / equipment: 전역 마스터라 전체 조회, 수정은 final_admin 누구나 ----
 CREATE POLICY room_types_select ON room_types FOR SELECT USING (TRUE);
 CREATE POLICY room_types_manage ON room_types FOR ALL
-    USING (current_role() = 'final_admin') WITH CHECK (current_role() = 'final_admin');
+    USING (current_assistant_role() = 'final_admin') WITH CHECK (current_assistant_role() = 'final_admin');
 
 CREATE POLICY equipment_select ON equipment FOR SELECT USING (TRUE);
 CREATE POLICY equipment_manage ON equipment FOR ALL
-    USING (current_role() = 'final_admin') WITH CHECK (current_role() = 'final_admin');
+    USING (current_assistant_role() = 'final_admin') WITH CHECK (current_assistant_role() = 'final_admin');
 
 -- ---- rooms: 전체 조회 가능, CRUD는 같은 건물의 final_admin만 ----
 CREATE POLICY rooms_select ON rooms FOR SELECT USING (TRUE);
 
 CREATE POLICY rooms_manage_by_final_admin ON rooms FOR ALL
-    USING (current_role() = 'final_admin' AND building_id = current_building_id())
-    WITH CHECK (current_role() = 'final_admin' AND building_id = current_building_id());
+    USING (current_assistant_role() = 'final_admin' AND building_id = current_building_id())
+    WITH CHECK (current_assistant_role() = 'final_admin' AND building_id = current_building_id());
 
 CREATE POLICY room_equipment_select ON room_equipment FOR SELECT USING (TRUE);
 CREATE POLICY room_equipment_manage ON room_equipment FOR ALL
     USING (is_manager_of_room(room_id) OR EXISTS (
         SELECT 1 FROM rooms r WHERE r.id = room_id
-          AND current_role() = 'final_admin' AND r.building_id = current_building_id()
+          AND current_assistant_role() = 'final_admin' AND r.building_id = current_building_id()
     ));
 
 -- ---- semesters: 전체 조회, 등록/수정은 final_admin (admin.html 학기 관리 탭) ----
 CREATE POLICY semesters_select ON semesters FOR SELECT USING (TRUE);
 CREATE POLICY semesters_manage ON semesters FOR ALL
-    USING (current_role() = 'final_admin') WITH CHECK (current_role() = 'final_admin');
+    USING (current_assistant_role() = 'final_admin') WITH CHECK (current_assistant_role() = 'final_admin');
 
 -- ---- class_schedules: 전체 조회. 등록/수정 주체가 mid_admin인지 final_admin인지 아직 미확정이라
 -- (위 노트 참고) 둘 다 허용 - 확정되면 하나로 좁혀주세요.
@@ -449,12 +449,12 @@ CREATE POLICY class_schedules_manage ON class_schedules FOR ALL
     USING (
         is_manager_of_room(room_id)
         OR EXISTS (SELECT 1 FROM rooms r WHERE r.id = room_id
-                     AND current_role() = 'final_admin' AND r.building_id = current_building_id())
+                     AND current_assistant_role() = 'final_admin' AND r.building_id = current_building_id())
     )
     WITH CHECK (
         is_manager_of_room(room_id)
         OR EXISTS (SELECT 1 FROM rooms r WHERE r.id = room_id
-                     AND current_role() = 'final_admin' AND r.building_id = current_building_id())
+                     AND current_assistant_role() = 'final_admin' AND r.building_id = current_building_id())
     );
 
 -- ---- bookings ----
@@ -464,12 +464,12 @@ CREATE POLICY bookings_select ON bookings FOR SELECT
         requester_id = auth.uid()
         OR is_manager_of_room(room_id)
         OR EXISTS (SELECT 1 FROM rooms r WHERE r.id = room_id
-                     AND current_role() = 'final_admin' AND r.building_id = current_building_id())
+                     AND current_assistant_role() = 'final_admin' AND r.building_id = current_building_id())
     );
 
 -- 신청: 로그인한 사람이 자기 이름으로만, 그리고 조교(assistant) 역할만 (mid_admin/final_admin은 예약 신청 대상 아님)
 CREATE POLICY bookings_insert ON bookings FOR INSERT
-    WITH CHECK (requester_id = auth.uid() AND current_role() = 'assistant');
+    WITH CHECK (requester_id = auth.uid() AND current_assistant_role() = 'assistant');
 
 -- 취소: 신청자 본인이 pending/approved 상태일 때만 (mypage.html 동작과 동일)
 CREATE POLICY bookings_cancel_by_requester ON bookings FOR UPDATE
