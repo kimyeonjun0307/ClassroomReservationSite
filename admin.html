@@ -441,6 +441,7 @@
       .eq('building_id', MY_BUILDING_ID)
       .eq('is_active', true)
       .order('floor').order('room_no');
+    if (res.error) { console.error('loadRooms failed:', res.error); alert('강의실 목록을 불러오지 못했습니다: ' + res.error.message); }
     ROOMS = res.data || [];
   }
 
