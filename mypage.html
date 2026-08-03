@@ -136,9 +136,9 @@
 <header>
   <div class="logo" onclick="mainback()">🏫 동서대학교 강의실 예약</div>
   <div class="user-info">
-    <span>👤 이수정 (소프트웨어융합학과)</span>
+    <span id="headerUserLabel">👤 -</span>
     <span class="divider">|</span>
-    <span class="logout" onclick="window.location.href='login.html'">로그아웃</span>
+    <span class="logout" id="logoutBtn">로그아웃</span>
   </div>
 </header>
 
@@ -149,32 +149,16 @@
   <div class="profile-card">
     <div class="profile-main">
       <div class="profile-name-row">
-        <span class="profile-name">이수정</span>
+        <span class="profile-name" id="profileName">-</span>
       </div>
-      <div class="profile-dept">소프트웨어융합학과</div>
+      <div class="profile-dept" id="profileJoined">-</div>
       <div class="profile-details">
         <div class="detail-item">
           <span class="detail-label">이메일</span>
-          <span class="detail-value">sujung.lee@dongseo.ac.kr</span>
-        </div>
-        <div class="detail-item">
-          <span class="detail-label">연락처</span>
-          <span class="detail-value">010-1234-5678</span>
-        </div>
-        <div class="detail-item">
-          <span class="detail-label">소속</span>
-          <span class="detail-value">소프트웨어융합학과</span>
-        </div>
-        <div class="detail-item">
-          <span class="detail-label">비밀번호</span>
-          <span class="detail-value">
-            <span id="pwDisplay">••••••••</span>
-            <button class="pw-toggle" onclick="togglePassword()" id="pwToggleBtn">보기</button>
-          </span>
+          <span class="detail-value" id="profileEmail">-</span>
         </div>
       </div>
     </div>
-    <button class="profile-edit-btn" onclick="alert('회원정보 수정 페이지로 이동합니다.')">회원정보 수정</button>
   </div>
 
   <div class="summary-cards">
@@ -182,28 +166,28 @@
       <div class="icon-circle icon-approved">✓</div>
       <div>
         <div class="card-label">승인 완료</div>
-        <div class="card-count">1건</div>
+        <div class="card-count" id="count-approved">0건</div>
       </div>
     </div>
     <div class="card" id="card-pending" onclick="filterByStatus('pending', '승인 대기')">
       <div class="icon-circle icon-pending">🕐</div>
       <div>
         <div class="card-label">승인 대기</div>
-        <div class="card-count">1건</div>
+        <div class="card-count" id="count-pending">0건</div>
       </div>
     </div>
     <div class="card" id="card-rejected" onclick="filterByStatus('rejected', '승인 거절')">
       <div class="icon-circle icon-rejected">✕</div>
       <div>
         <div class="card-label">승인 거절</div>
-        <div class="card-count">1건</div>
+        <div class="card-count" id="count-rejected">0건</div>
       </div>
     </div>
     <div class="card" id="card-done" onclick="filterByStatus('done', '이용 내역')">
       <div class="icon-circle icon-done">📁</div>
       <div>
         <div class="card-label">이용 내역</div>
-        <div class="card-count">1건</div>
+        <div class="card-count" id="count-done">0건</div>
       </div>
     </div>
   </div>
@@ -225,149 +209,149 @@
         <th>예약 취소</th>
       </tr>
     </thead>
-    <tbody>
-      <tr data-status="pending">
-        <td>2026-07-14</td>
-        <td class="space-name">UIT 201호</td>
-        <td>2026-07-22 (수)<br>13:00~15:30</td>
-        <td>조별 과제 - UIT 학회 미팅</td>
-        <td><span class="status status-pending">승인 대기</span></td>
-        <td class="reason">담당자 확인 중입니다.</td>
-        <td><button type="button" class="btn-cancel" onclick="cancelReservation(this)">예약 취소</button></td>
-      </tr>
-      <tr data-status="approved">
-        <td>2026-07-10</td>
-        <td class="space-name">소융대 402호</td>
-        <td>2026-07-15 (수)<br>15:00~17:00</td>
-        <td>AI 프로젝트 발표 준비</td>
-        <td><span class="status status-approved">승인 완료</span></td>
-        <td class="reason">빔프로젝터 대여 포함. 사용 후 정리 부탁드립니다.</td>
-        <td><button type="button" class="btn-cancel" onclick="cancelReservation(this)">예약 취소</button></td>
-      </tr>
-      <tr data-status="rejected">
-        <td>2026-07-08</td>
-        <td class="space-name">정보관 301호 (실습실)</td>
-        <td>2026-07-13 (월)<br>10:00~12:00</td>
-        <td>개인 알고리즘 스터디</td>
-        <td><span class="status status-rejected">승인 거절</span></td>
-        <td class="reason"><span class="warn">⚠ 해당 시간 정기 수업(데이터베이스)으로 인해 대여 불가</span></td>
-        <td class="cell-dash">-</td>
-      </tr>
-      <tr data-status="done">
-        <td>2026-06-25</td>
-        <td class="space-name">UIT 101호</td>
-        <td>2026-07-02 (목)<br>14:00~16:00</td>
-        <td>소프트웨어 공학 멘토링</td>
-        <td><span class="status status-done">이용 완료</span></td>
-        <td class="reason">-</td>
-        <td class="cell-dash">-</td>
-      </tr>
+    <tbody id="bookingsTbody">
     </tbody>
   </table>
 </main>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/js/supabase-client.js"></script>
 <script>
-  const rows = document.querySelectorAll('tbody tr');
-  const cards = {
+  var STATUS_LABEL = {
+    pending: '승인 대기', approved: '승인 완료', rejected: '승인 거절',
+    cancelled: '취소됨', done: '이용 완료'
+  };
+  var bookingsCache = [];
+
+  var cards = {
     approved: document.getElementById('card-approved'),
     pending: document.getElementById('card-pending'),
     rejected: document.getElementById('card-rejected'),
     done: document.getElementById('card-done')
   };
-  const banner = document.getElementById('filterBanner');
-  const bannerText = document.getElementById('filterBannerText');
+  var banner = document.getElementById('filterBanner');
+  var bannerText = document.getElementById('filterBannerText');
 
-  function clearActiveCards() {
-    Object.values(cards).forEach(c => c.classList.remove('active'));
-  }
-
-  function removeEmptyRow() {
-    const existing = document.getElementById('emptyRow');
-    if (existing) existing.remove();
-  }
+  function clearActiveCards() { Object.keys(cards).forEach(function (k) { cards[k].classList.remove('active'); }); }
 
   function filterByStatus(status, label) {
     clearActiveCards();
     cards[status].classList.add('active');
-
-    let visibleCount = 0;
-    rows.forEach(row => {
-      if (row.dataset.status === status) {
-        row.classList.remove('hidden-row');
-        visibleCount++;
-      } else {
-        row.classList.add('hidden-row');
-      }
+    document.querySelectorAll('#bookingsTbody tr').forEach(function (row) {
+      row.classList.toggle('hidden-row', row.getAttribute('data-status') !== status);
     });
+    updateEmptyRow();
+    banner.classList.add('show');
+    bannerText.textContent = '"' + label + '" 상태의 내역만 보고 있습니다.';
+  }
+  window.filterByStatus = filterByStatus;
 
-    removeEmptyRow();
-    if (visibleCount === 0) {
-      const tbody = document.querySelector('tbody');
-      const tr = document.createElement('tr');
+  function showAll() {
+    clearActiveCards();
+    document.querySelectorAll('#bookingsTbody tr').forEach(function (row) { row.classList.remove('hidden-row'); });
+    updateEmptyRow();
+    banner.classList.remove('show');
+  }
+  window.showAll = showAll;
+
+  function updateEmptyRow() {
+    var existing = document.getElementById('emptyRow');
+    if (existing) existing.remove();
+    var visible = Array.prototype.slice.call(document.querySelectorAll('#bookingsTbody tr:not(.hidden-row)'));
+    if (visible.length === 0) {
+      var tbody = document.getElementById('bookingsTbody');
+      var tr = document.createElement('tr');
       tr.id = 'emptyRow';
       tr.className = 'empty-row';
       tr.innerHTML = '<td colspan="7">해당하는 내역이 없습니다.</td>';
       tbody.appendChild(tr);
     }
-
-    banner.classList.add('show');
-    bannerText.textContent = `"${label}" 상태의 내역만 보고 있습니다.`;
   }
 
-  function showAll() {
-    clearActiveCards();
-    rows.forEach(row => row.classList.remove('hidden-row'));
-    removeEmptyRow();
-    banner.classList.remove('show');
+  function mainback() { window.location.href = 'index.html'; }
+  window.mainback = mainback;
 
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
   }
 
-  function updateSummaryCount(status) {
-    const card = cards[status];
-    if (!card) return;
-    const countEl = card.querySelector('.card-count');
-    const current = parseInt(countEl.textContent, 10) || 0;
-    countEl.textContent = Math.max(current - 1, 0) + '건';
+  function formatDateTime(iso) { return iso.slice(0, 10); }
+
+  async function loadBookings(userId) {
+    var res = await supabase
+      .from('bookings')
+      .select('id, date, start_time, end_time, purpose, status, review_comment, created_at, rooms(room_name)')
+      .eq('requester_id', userId)
+      .order('created_at', { ascending: false });
+    if (res.error) { alert('예약 목록을 불러오지 못했습니다: ' + res.error.message); return; }
+    bookingsCache = res.data || [];
+    renderBookings();
   }
 
-  function cancelReservation(btn) {
-    const row = btn.closest('tr');
-    const status = row.dataset.status;
+  function renderBookings() {
+    var tbody = document.getElementById('bookingsTbody');
+    tbody.innerHTML = '';
+    var counts = { approved: 0, pending: 0, rejected: 0, done: 0 };
 
-    if (status !== 'pending' && status !== 'approved') return;
+    bookingsCache.forEach(function (b) {
+      if (counts[b.status] !== undefined) counts[b.status]++;
 
-    const spaceName = row.querySelector('.space-name').textContent.trim();
-    const usage = row.cells[2].innerText.replace('\n', ' ');
-    const ok = confirm(`"${spaceName}" (${usage}) 예약을 취소하시겠습니까?\n취소한 예약은 되돌릴 수 없습니다.`);
+      var tr = document.createElement('tr');
+      tr.setAttribute('data-status', b.status);
+      tr.setAttribute('data-booking-id', b.id);
+
+      var canCancel = (b.status === 'pending' || b.status === 'approved');
+      var actionHtml = canCancel
+        ? '<button type="button" class="btn-cancel" data-cancel-id="' + b.id + '">예약 취소</button>'
+        : (b.status === 'cancelled' ? '<span class="cell-canceled">취소 완료</span>' : '<span class="cell-dash">-</span>');
+
+      tr.innerHTML =
+        '<td>' + formatDateTime(b.created_at) + '</td>' +
+        '<td class="space-name">' + escapeHtml(b.rooms ? b.rooms.room_name : '-') + '</td>' +
+        '<td>' + b.date + '<br>' + b.start_time.slice(0, 5) + '~' + b.end_time.slice(0, 5) + '</td>' +
+        '<td>' + escapeHtml(b.purpose) + '</td>' +
+        '<td><span class="status status-' + b.status + '">' + STATUS_LABEL[b.status] + '</span></td>' +
+        '<td class="reason">' + (b.review_comment ? escapeHtml(b.review_comment) : '<span class="cell-dash">-</span>') + '</td>' +
+        '<td>' + actionHtml + '</td>';
+      tbody.appendChild(tr);
+    });
+
+    document.getElementById('count-approved').textContent = counts.approved + '건';
+    document.getElementById('count-pending').textContent = counts.pending + '건';
+    document.getElementById('count-rejected').textContent = counts.rejected + '건';
+    document.getElementById('count-done').textContent = counts.done + '건';
+
+    if (!document.querySelector('.card.active')) updateEmptyRow();
+  }
+
+  document.getElementById('bookingsTbody').addEventListener('click', async function (e) {
+    var btn = e.target.closest('[data-cancel-id]');
+    if (!btn) return;
+    var bookingId = btn.getAttribute('data-cancel-id');
+    var row = btn.closest('tr');
+    var spaceName = row.querySelector('.space-name').textContent.trim();
+    var usage = row.cells[2].innerText.replace('\n', ' ');
+    var ok = confirm('"' + spaceName + '" (' + usage + ') 예약을 취소하시겠습니까?\n취소한 예약은 되돌릴 수 없습니다.');
     if (!ok) return;
 
-    updateSummaryCount(status);
+    var res = await supabaseClient.from('bookings').update({ status: 'cancelled' }).eq('id', bookingId);
+    if (res.error) { alert('취소에 실패했습니다: ' + res.error.message); return; }
 
-    row.dataset.status = 'canceled';
-    const statusEl = row.querySelector('.status');
-    statusEl.textContent = '취소됨';
-    statusEl.className = 'status status-canceled';
+    var auth = await requireSession();
+    if (auth) await loadBookings(auth.session.user.id);
+  });
 
-    const actionCell = btn.closest('td');
-    actionCell.innerHTML = '<span class="cell-canceled">취소 완료</span>';
-  }
- 
-  function togglePassword() {
-    const pwDisplay = document.getElementById('pwDisplay');
-    const btn = document.getElementById('pwToggleBtn');
-    if (pwDisplay.textContent === '••••••••') {
-      pwDisplay.textContent = 'Sj#2026dsu!';
-      btn.textContent = '숨기기';
-    } else {
-      pwDisplay.textContent = '••••••••';
-      btn.textContent = '보기';
-    }
-  }
-
-  function mainback() {
-    window.location.href = "index.html";
-  }
-
+  (async function init() {
+    var auth = await requireRole(['assistant']);
+    if (!auth) return;
+    document.getElementById('profileName').textContent = auth.profile.name;
+    document.getElementById('profileEmail').textContent = auth.session.user.email;
+    document.getElementById('profileJoined').textContent = '가입일 ' + formatDateTime(auth.profile.created_at);
+    document.getElementById('logoutBtn').addEventListener('click', signOutAndRedirect);
+    await loadBookings(auth.session.user.id);
+  })();
 </script>
 
 </body>

@@ -494,3 +494,18 @@ CREATE POLICY booking_logs_insert ON booking_logs FOR INSERT
 -- ---- favorites: 본인 것만 ----
 CREATE POLICY favorites_owner ON favorites FOR ALL
     USING (assistant_id = auth.uid()) WITH CHECK (assistant_id = auth.uid());
+
+
+-- ============================================================
+-- 13. room_busy_slots: bookings RLS를 우회해 "이 시간대 비어있는지"만 노출하는 뷰
+-- ============================================================
+-- bookings_select 정책상 assistant는 본인 예약만 보이는데, 그러면 다른 사람이 이미 잡아놓은
+-- 시간대인지 신청 전에 확인할 방법이 없다. 목적/신청자 같은 민감정보는 빼고
+-- room_id/date/start_time/end_time만 노출하는 뷰를 postgres(테이블 소유자) 권한으로 만들어서
+-- (SECURITY INVOKER를 안 켠 기본 상태) bookings의 RLS를 우회한다.
+CREATE OR REPLACE VIEW public.room_busy_slots AS
+SELECT room_id, date, start_time, end_time
+FROM public.bookings
+WHERE status IN ('pending', 'approved');
+
+GRANT SELECT ON public.room_busy_slots TO authenticated;

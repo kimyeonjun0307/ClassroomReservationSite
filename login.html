@@ -209,28 +209,20 @@
 
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/js/supabase-client.js"></script>
 <script>
-  var MANAGERS = {
-    "sujeong": { name: "이수정 관리자", email: "sujeong@dongseo.ac.kr", rooms: ["UIT 201", "UIT 202", "UIT 301"] },
-    "gwanho":  { name: "박관호 관리자", email: "gwanho@dongseo.ac.kr", rooms: ["UIT 401", "UIT 402", "전자정보관 101"] },
-    "damdang": { name: "김담당 관리자", email: "damdang@dongseo.ac.kr", rooms: ["뉴밀레니엄관 110", "뉴밀레니엄관 210", "전자정보관 301"] }
-  };
-
   var currentRole = "user";
 
   var roleTabs = document.querySelectorAll(".role-tab");
   var idLabel = document.getElementById("idLabel");
   var userIdInput = document.getElementById("userId");
+  var pwInput = document.getElementById("userPw");
   var btnLogin = document.getElementById("btnLogin");
+  var rememberMe = document.getElementById("rememberMe");
 
-  function findManagerIdByEmail(email) {
-    var lower = email.toLowerCase();
-    var found = null;
-    Object.keys(MANAGERS).forEach(function (id) {
-      if (MANAGERS[id].email.toLowerCase() === lower) found = id;
-    });
-    return found;
-  }
+  var savedEmail = localStorage.getItem("rememberedEmail");
+  if (savedEmail) { userIdInput.value = savedEmail; rememberMe.checked = true; }
 
   function setRole(role) {
     currentRole = role;
@@ -245,24 +237,71 @@
     tab.addEventListener("click", function () { setRole(tab.getAttribute("data-role")); });
   });
 
-  document.getElementById("loginForm").addEventListener("submit", function (e) {
+  // 역할에 맞는 화면으로 보내는 건 탭 선택이 아니라 DB에 저장된 실제 role 기준으로 함 (권한은 RLS가 보장)
+  document.getElementById("loginForm").addEventListener("submit", async function (e) {
     e.preventDefault();
-    var id = userIdInput.value.trim();
-    var pw = document.getElementById("userPw").value.trim();
+    var email = userIdInput.value.trim();
+    var pw = pwInput.value.trim();
 
-    if (!id || !pw) {
+    if (!email || !pw) {
       alert("아이디와 비밀번호를 모두 입력해주세요.");
       return;
     }
-    if (currentRole === "staff") {
-      var managerId = findManagerIdByEmail(id) || Object.keys(MANAGERS)[0]; // 테스트 중: 아무 이메일이나 첫 번째 관리자로 로그인
-      sessionStorage.setItem("managerId", managerId);
-      window.location.href = "manager.html";
-    } else if (currentRole === "superadmin") {
-      window.location.href = "admin.html";
-    } else {
-      window.location.href = "index.html";
+
+    btnLogin.disabled = true;
+    btnLogin.textContent = "로그인 중...";
+
+    try {
+      var signInResult = await supabaseClient.auth.signInWithPassword({ email: email, password: pw });
+      if (signInResult.error) {
+        alert("로그인에 실패했습니다: " + signInResult.error.message);
+        return;
+      }
+
+      var profileResult = await supabase
+        .from("assistants")
+        .select("role, is_active")
+        .eq("id", signInResult.data.user.id)
+        .single();
+
+      if (profileResult.error || !profileResult.data) {
+        alert("계정 프로필을 찾을 수 없습니다: " + (profileResult.error ? profileResult.error.message : "프로필 없음"));
+        await supabaseClient.auth.signOut();
+        return;
+      }
+      if (!profileResult.data.is_active) {
+        alert("비활성화된 계정입니다. 관리자에게 문의해주세요.");
+        await supabaseClient.auth.signOut();
+        return;
+      }
+
+      if (rememberMe.checked) localStorage.setItem("rememberedEmail", email);
+      else localStorage.removeItem("rememberedEmail");
+
+      redirectToRoleHome(profileResult.data.role);
+    } catch (err) {
+      alert("예상치 못한 오류가 발생했습니다: " + (err && err.message ? err.message : err));
+      console.error(err);
+    } finally {
+      btnLogin.disabled = false;
+      btnLogin.textContent = "로그인";
     }
+  });
+
+  document.querySelector(".quick-links a").parentElement.querySelectorAll("a")[1].addEventListener("click", async function (e) {
+    e.preventDefault();
+    var email = userIdInput.value.trim();
+    var pw = pwInput.value.trim();
+    if (!email || !pw) {
+      alert("회원가입할 이메일과 비밀번호를 위 입력칸에 먼저 입력해주세요.");
+      return;
+    }
+    var signUpResult = await supabaseClient.auth.signUp({ email: email, password: pw });
+    if (signUpResult.error) {
+      alert("회원가입에 실패했습니다: " + signUpResult.error.message);
+      return;
+    }
+    alert("가입되었습니다. 같은 정보로 로그인해주세요.");
   });
 </script>
 
