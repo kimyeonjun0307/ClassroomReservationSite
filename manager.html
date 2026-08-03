@@ -571,8 +571,16 @@
       <input type="text" id="editRoomName">
     </div>
     <div class="edit-field">
+      <label>공간유형</label>
+      <select id="editRoomType"></select>
+    </div>
+    <div class="edit-field">
       <label>수용 인원</label>
       <input type="text" id="editRoomCapacity">
+    </div>
+    <div class="edit-field">
+      <label>보유 기자재</label>
+      <div id="editRoomEquipList" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
     </div>
     <div class="edit-field">
       <label>이용수칙 / 비고</label>
@@ -646,7 +654,9 @@
 <script src="assets/js/supabase-client.js"></script>
 <script>
   var CURRENT_USER = null;
-  var MY_ROOMS = [];           // [{id, room_name, floor, capacity, guideline_text, managing_dept, contact_phone, contact_email, room_types(name)}]
+  var MY_ROOMS = [];           // [{id, room_name, floor, capacity, guideline_text, managing_dept, contact_phone, contact_email, room_type_id, room_types(name), room_equipment(equipment_id)}]
+  var ROOM_TYPES = [];
+  var EQUIPMENT = [];
   var currentViewDate = new Date();
   var selectedFloor = '';
   var selectedRoomId = '';     // '' = 전체 담당 강의실
@@ -696,6 +706,7 @@
     document.getElementById('headerManagerName').textContent = auth.profile.name + '님';
     document.getElementById('logoutBtn').addEventListener('click', signOutAndRedirect);
 
+    await loadRoomTypesAndEquipment();
     await loadMyRooms();
     renderFloorGrid();
     renderMyRoomGroup();
@@ -704,10 +715,21 @@
     await refreshAll();
   })();
 
+  async function loadRoomTypesAndEquipment() {
+    var typesRes = await supabaseClient.from('room_types').select('id, name').order('name');
+    ROOM_TYPES = typesRes.data || [];
+    document.getElementById('editRoomType').innerHTML = ROOM_TYPES.map(function (t) {
+      return '<option value="' + t.id + '">' + escapeHtml(t.name) + '</option>';
+    }).join('');
+
+    var equipRes = await supabaseClient.from('equipment').select('id, name').order('id');
+    EQUIPMENT = equipRes.data || [];
+  }
+
   async function loadMyRooms() {
     var res = await supabaseClient
       .from('rooms')
-      .select('id, room_name, floor, capacity, guideline_text, managing_dept, contact_phone, contact_email, room_types(name)')
+      .select('id, room_name, floor, capacity, guideline_text, managing_dept, contact_phone, contact_email, room_type_id, room_types(name), room_equipment(equipment_id)')
       .eq('manager_id', CURRENT_USER.id)
       .order('floor').order('room_name');
     MY_ROOMS = res.data || [];
@@ -1056,17 +1078,29 @@
   var editRoomModalOverlay = document.getElementById('editRoomModalOverlay');
   var editingRoomId = null;
 
+  function renderEditRoomEquipList(checkedEquipIds) {
+    var box = document.getElementById('editRoomEquipList');
+    box.innerHTML = EQUIPMENT.map(function (eq) {
+      var checked = checkedEquipIds.indexOf(eq.id) !== -1 ? ' checked' : '';
+      return '<label style="display:flex; align-items:center; gap:5px; font-size:12px; border:1.5px solid var(--gray-200); border-radius:100px; padding:6px 11px; cursor:pointer;">' +
+        '<input type="checkbox" data-equip-id="' + eq.id + '"' + checked + ' style="width:auto; height:auto;">' + escapeHtml(eq.name) + '</label>';
+    }).join('');
+  }
+
   function openEditRoomModal(roomId) {
     roomId = parseInt(roomId, 10);
     var room = MY_ROOMS.filter(function (r) { return r.id === roomId; })[0];
     if (!room) return;
     editingRoomId = roomId;
     document.getElementById('editRoomName').value = room.room_name || '';
+    document.getElementById('editRoomType').value = room.room_type_id || '';
     document.getElementById('editRoomCapacity').value = room.capacity || '';
     document.getElementById('editRoomNote').value = room.guideline_text || '';
     document.getElementById('editRoomContactDept').value = room.managing_dept || '';
     document.getElementById('editRoomContactPhone').value = room.contact_phone || '';
     document.getElementById('editRoomContactEmail').value = room.contact_email || '';
+    var currentEquipIds = (room.room_equipment || []).map(function (re) { return re.equipment_id; });
+    renderEditRoomEquipList(currentEquipIds);
     editRoomModalOverlay.classList.add('show');
   }
 
@@ -1077,6 +1111,7 @@
     var capacity = parseInt(document.getElementById('editRoomCapacity').value, 10);
     var res = await supabaseClient.from('rooms').update({
       room_name: document.getElementById('editRoomName').value.trim(),
+      room_type_id: parseInt(document.getElementById('editRoomType').value, 10),
       capacity: capacity || null,
       guideline_text: document.getElementById('editRoomNote').value.trim() || null,
       managing_dept: document.getElementById('editRoomContactDept').value.trim() || null,
@@ -1084,6 +1119,23 @@
       contact_email: document.getElementById('editRoomContactEmail').value.trim() || null
     }).eq('id', editingRoomId);
     if (res.error) { alert('저장에 실패했습니다: ' + res.error.message); return; }
+
+    var room = MY_ROOMS.filter(function (r) { return r.id === editingRoomId; })[0];
+    var oldEquipIds = room ? (room.room_equipment || []).map(function (re) { return re.equipment_id; }) : [];
+    var checkedBoxes = document.querySelectorAll('#editRoomEquipList input:checked');
+    var newEquipIds = Array.prototype.slice.call(checkedBoxes).map(function (cb) { return parseInt(cb.getAttribute('data-equip-id'), 10); });
+    var toAdd = newEquipIds.filter(function (id) { return oldEquipIds.indexOf(id) === -1; });
+    var toRemove = oldEquipIds.filter(function (id) { return newEquipIds.indexOf(id) === -1; });
+
+    if (toAdd.length) {
+      var addRes = await supabaseClient.from('room_equipment').insert(toAdd.map(function (equipId) { return { room_id: editingRoomId, equipment_id: equipId }; }));
+      if (addRes.error) { alert('기자재 저장 중 일부 실패: ' + addRes.error.message); }
+    }
+    if (toRemove.length) {
+      var delRes = await supabaseClient.from('room_equipment').delete().eq('room_id', editingRoomId).in('equipment_id', toRemove);
+      if (delRes.error) { alert('기자재 삭제 중 일부 실패: ' + delRes.error.message); }
+    }
+
     editRoomModalOverlay.classList.remove('show');
     await loadMyRooms();
     renderMyRoomGroup();
