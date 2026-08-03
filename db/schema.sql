@@ -411,6 +411,10 @@ CREATE POLICY equipment_select ON equipment FOR SELECT USING (TRUE);
 CREATE POLICY equipment_manage ON equipment FOR ALL
     USING (current_assistant_role() = 'final_admin') WITH CHECK (current_assistant_role() = 'final_admin');
 
+-- mid_admin도 새 기자재 종류는 추가할 수 있음 (권한 상승 위험 없는 단순 이름 목록이라)
+CREATE POLICY equipment_insert_by_mid_admin ON equipment FOR INSERT
+    WITH CHECK (current_assistant_role() IN ('mid_admin', 'final_admin'));
+
 -- ---- rooms: 전체 조회 가능, CRUD는 final_admin 누구나 (건물 무관, 전체 총괄) ----
 CREATE POLICY rooms_select ON rooms FOR SELECT USING (TRUE);
 

@@ -580,7 +580,11 @@
     </div>
     <div class="edit-field">
       <label>보유 기자재</label>
-      <div id="editRoomEquipList" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
+      <div id="editRoomEquipList" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px;"></div>
+      <div style="display:flex; gap:6px;">
+        <input type="text" id="newEquipName" placeholder="새 기자재 이름 (예: 실물화상기)" style="flex:1;">
+        <button type="button" id="addEquipBtn" class="subbar-link" style="flex-shrink:0;">추가</button>
+      </div>
     </div>
     <div class="edit-field">
       <label>이용수칙 / 비고</label>
@@ -732,6 +736,7 @@
       .select('id, room_name, floor, capacity, guideline_text, managing_dept, contact_phone, contact_email, room_type_id, room_types(name), room_equipment(equipment_id)')
       .eq('manager_id', CURRENT_USER.id)
       .order('floor').order('room_name');
+    if (res.error) { console.error('loadMyRooms failed:', res.error); alert('담당 강의실 목록을 불러오지 못했습니다: ' + res.error.message); }
     MY_ROOMS = res.data || [];
   }
 
@@ -1086,6 +1091,28 @@
         '<input type="checkbox" data-equip-id="' + eq.id + '"' + checked + ' style="width:auto; height:auto;">' + escapeHtml(eq.name) + '</label>';
     }).join('');
   }
+
+  function currentlyCheckedEquipIds() {
+    var checked = document.querySelectorAll('#editRoomEquipList input:checked');
+    return Array.prototype.slice.call(checked).map(function (cb) { return parseInt(cb.getAttribute('data-equip-id'), 10); });
+  }
+
+  document.getElementById('addEquipBtn').addEventListener('click', async function () {
+    var input = document.getElementById('newEquipName');
+    var name = input.value.trim();
+    if (!name) return;
+
+    var alreadyChecked = currentlyCheckedEquipIds();
+    var res = await supabaseClient.from('equipment').insert({ name: name }).select('id, name').single();
+    if (res.error) {
+      alert(res.error.message.indexOf('duplicate') !== -1 ? '이미 있는 기자재 이름이에요.' : ('추가 실패: ' + res.error.message));
+      return;
+    }
+    EQUIPMENT.push(res.data);
+    alreadyChecked.push(res.data.id); // 새로 추가한 기자재는 바로 이 방에 체크된 상태로
+    renderEditRoomEquipList(alreadyChecked);
+    input.value = '';
+  });
 
   function openEditRoomModal(roomId) {
     roomId = parseInt(roomId, 10);
