@@ -29,30 +29,7 @@
     color: var(--gray-900);
   }
 
-  /* ---------- 로그인 화면 ---------- */
-  #loginScreen {
-    position: fixed; inset: 0;
-    background: linear-gradient(135deg, #7F1010 0%, #B91C1C 60%, #DC5F45 100%);
-    display: flex; align-items: center; justify-content: center; z-index: 100;
-  }
-  #loginScreen.hide { display: none; }
-  .login-card {
-    background: #fff; border-radius: var(--radius-lg); padding: 36px; width: 400px;
-    box-shadow: var(--shadow-lg);
-  }
-  .login-card h1 { font-size: 19px; color: var(--gray-900); margin: 0 0 6px; font-weight: 700; letter-spacing: -0.3px; }
-  .login-card p { font-size: 12.5px; color: var(--gray-500); margin: 0 0 24px; }
-  .login-manager-list { display: flex; flex-direction: column; gap: 10px; }
-  .login-manager-btn {
-    text-align: left; border: 1.5px solid var(--gray-200); border-radius: var(--radius-sm); padding: 13px 15px;
-    background: #fff; cursor: pointer; transition: all .12s;
-  }
-  .login-manager-btn:hover { border-color: var(--primary-light); background: var(--gray-50); }
-  .login-manager-btn .lm-name { font-size: 14px; font-weight: 700; color: var(--primary); }
-  .login-manager-btn .lm-rooms { font-size: 11.5px; color: var(--gray-500); margin-top: 4px; }
-
-  #appRoot { display: none; }
-  #appRoot.show { display: block; }
+  #appRoot { display: block; }
 
   header {
     background: var(--primary);
