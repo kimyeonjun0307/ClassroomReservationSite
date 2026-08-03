@@ -1,0 +1,1357 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>강의실 예약 · 동서대학교 공간 예약 시스템</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+<style>
+  :root {
+    --primary: #B91C1C; --primary-dark: #7F1010; --primary-light: #D64545;
+    --accent: #C2410C;
+    --success: #12805C; --success-bg: #E6F6EF; --success-border: #9BD9BE;
+    --warning: #B7791F; --warning-bg: #FDF3E2; --warning-border: #F0CE8C;
+    --danger: #C13A3A; --danger-bg: #FCEBEB; --danger-border: #F0AFAF;
+    --gray-900: #1A1D23; --gray-700: #454B54; --gray-500: #767D89;
+    --gray-300: #D8DCE2; --gray-200: #E7E9ED; --gray-100: #F1F3F6; --gray-50: #F8F9FB;
+    --border: #E4E7EC;
+    --shadow-sm: 0 1px 2px rgba(16,24,40,0.05);
+    --shadow-md: 0 4px 16px rgba(16,24,40,0.08);
+    --shadow-lg: 0 16px 40px rgba(16,24,40,0.14);
+    --radius-sm: 8px; --radius-md: 12px; --radius-lg: 16px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Pretendard", -apple-system, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+    background: var(--gray-50);
+    color: var(--gray-900);
+  }
+  header {
+    background: var(--primary);
+    color: #fff;
+    padding: 16px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  header .title { font-size: 17px; font-weight: 700; letter-spacing: -0.2px; }
+  header .title span { font-size: 12px; color: rgba(255,255,255,0.55); margin-left: 10px; font-weight: 400; }
+  header .menu { font-size: 13px; color: rgba(255,255,255,0.72); display: flex; align-items: center; }
+  header .menu span { margin-left: 20px; cursor: pointer; transition: color .12s; }
+  header .menu span:hover { color: #fff; }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 280px 1fr 270px;
+    gap: 18px;
+    padding: 22px;
+    align-items: start;
+  }
+  .panel {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--shadow-sm);
+  }
+  .panel h2 { font-size: 14.5px; font-weight: 700; margin: 0 0 14px; color: var(--gray-900); letter-spacing: -0.1px; }
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-size: 12.5px; font-weight: 600; color: var(--gray-700); margin-bottom: 7px; }
+  .field label .tag-required { font-size: 11px; color: var(--danger); font-weight: 500; margin-left: 4px; }
+  .field label .tag-optional { font-size: 11px; color: var(--gray-500); font-weight: 400; margin-left: 4px; }
+
+  input[type="text"], input[type="number"], input[type="date"], select {
+    width: 100%;
+    height: 38px;
+    border: 1.5px solid var(--gray-200);
+    border-radius: var(--radius-sm);
+    padding: 0 12px;
+    font-size: 13px;
+    font-family: inherit;
+    background: var(--gray-50);
+    color: var(--gray-900);
+    transition: border-color .12s, background .12s;
+  }
+  input[type="text"]:focus, input[type="number"]:focus, input[type="date"]:focus, select:focus {
+    outline: none; border-color: var(--primary-light); background: #fff;
+  }
+  select:disabled { background: var(--gray-100); color: var(--gray-300); cursor: not-allowed; }
+
+  /* Building search with toggle */
+  .building-box { position: relative; }
+  .building-search-wrap { position: relative; }
+  .building-input-row { display: flex; gap: 7px; }
+  .building-input-row input { flex: 1; }
+  .toggle-btn {
+    width: 38px; height: 38px; border: 1.5px solid var(--gray-200); border-radius: var(--radius-sm);
+    background: #fff; cursor: pointer; font-size: 11px; color: var(--gray-500); flex-shrink: 0; transition: all .12s;
+  }
+  .toggle-btn.open { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .building-dropdown {
+    display: none; position: absolute; top: calc(100% + 6px); left: 0; width: 100%;
+    max-height: 170px; overflow-x: hidden; overflow-y: auto;
+    background: #fff; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-md); z-index: 10;
+  }
+  .building-dropdown.show { display: block; }
+  .building-dropdown div { padding: 10px 13px; font-size: 13px; cursor: pointer; }
+  .building-dropdown div:hover { background: var(--gray-50); }
+  #buildingHint { font-size: 11.5px; color: var(--gray-500); margin: 7px 2px 0; min-height: 14px; }
+  #buildingHint.none { color: var(--danger); }
+  #buildingHint.ok { color: var(--success); }
+
+  /* Toggle-button style multi-select */
+  .toggle-group { display: flex; flex-wrap: wrap; gap: 7px; }
+  .toggle-chip {
+    padding: 7px 13px; border: 1.5px solid var(--gray-200); border-radius: 100px; font-size: 12px;
+    background: #fff; color: var(--gray-700); cursor: pointer; user-select: none; transition: all .12s;
+  }
+  .toggle-chip:hover { border-color: var(--primary-light); }
+  .toggle-chip.active { background: var(--primary); color: #fff; border-color: var(--primary); font-weight: 600; }
+
+  .row-split { display: flex; gap: 8px; }
+  .row-split select { width: 50%; }
+  input[type="range"] { width: 100%; accent-color: var(--primary); }
+  .slider-labels { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--gray-500); margin-top: 5px; }
+
+  .btn {
+    width: 100%; height: 42px; border: none; border-radius: var(--radius-sm);
+    background: var(--primary); color: #fff; font-size: 14px; font-weight: 700; cursor: pointer;
+    transition: background .12s, transform .08s;
+  }
+  .btn:hover { background: var(--primary-dark); }
+  .btn:active { transform: scale(0.99); }
+  .btn-ghost {
+    background: #fff; color: var(--primary); border: 1.5px solid var(--gray-200);
+    font-weight: 600; height: 32px; font-size: 12px; width: auto; padding: 0 12px; border-radius: var(--radius-sm); cursor: pointer;
+  }
+  .btn-ghost:hover { border-color: var(--primary-light); }
+
+  /* Left Panel Result List */
+  #leftPanelContent { max-height: 560px; overflow-y: auto; padding-right: 4px; }
+  #leftPanelContent::-webkit-scrollbar { width: 6px; }
+  #leftPanelContent::-webkit-scrollbar-thumb { background: var(--gray-300); border-radius: 4px; }
+
+  .result-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-size: 12px; color: var(--gray-500); }
+  .floor-label { font-size: 12px; font-weight: 700; color: var(--gray-500); margin: 16px 0 7px; }
+  .room-item {
+    padding: 11px 13px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 7px;
+    cursor: pointer; font-size: 13px; display: flex; justify-content: space-between; align-items: center;
+    transition: all .1s;
+  }
+  .room-item:hover { border-color: var(--primary-light); background: var(--gray-50); }
+  .room-item.active { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 700; }
+  .room-item.active .type { color: rgba(255,255,255,0.75); }
+  .room-item.active .star-btn { color: rgba(255,255,255,0.55); }
+  .room-item.active .star-btn.fav { color: #FFD666; }
+  .room-item .type { font-size: 11px; color: var(--gray-500); font-weight: 400; }
+
+  /* Center Panel Timelines */
+  .timeline-nav { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 18px; font-size: 15.5px; font-weight: 700; color: var(--gray-900); letter-spacing: -0.2px; }
+  .timeline-nav #centerTitle { text-align: center; white-space: nowrap; }
+  .grid-hours { display: grid; grid-template-columns: 60px repeat(10, 1fr); font-size: 11px; color: var(--gray-500); margin-bottom: 8px; padding-right: 10px; }
+
+  .timeline-list {
+    flex: 1; max-height: 500px; overflow-y: auto; padding-right: 4px; border-top: 1px solid var(--gray-100);
+  }
+  .timeline-list::-webkit-scrollbar { width: 6px; }
+  .timeline-list::-webkit-scrollbar-thumb { background: var(--gray-300); border-radius: 4px; }
+
+  .grid-body {
+    display: grid; grid-template-columns: 60px 1fr; align-items: center;
+    min-height: 54px; padding: 6px 0; border-bottom: 1px solid var(--gray-100);
+    cursor: default; transition: background 0.15s, min-height 0.15s; border-radius: var(--radius-sm);
+  }
+  .grid-body.active { background: #EFF4FA; }
+
+  .grid-body.detail-mode { min-height: auto; padding: 10px 0 16px; cursor: default; background: transparent; }
+  .grid-body.detail-mode:hover { background: transparent; }
+  .grid-body.detail-mode .room-tag { align-self: flex-start; font-size: 13px; padding-top: 4px; }
+
+  .room-tag { font-size: 12px; font-weight: 700; color: var(--gray-700); display: flex; align-items: center; justify-content: center; }
+
+  .track-wrap { position: relative; height: 44px; }
+
+  .compact-track { display: block; }
+  .grid-body.detail-mode .compact-track { display: none; }
+
+  .week-view { display: none; }
+  .grid-body.detail-mode .week-view { display: flex; flex-direction: column; gap: 8px; }
+  .day-row { display: grid; grid-template-columns: 34px 1fr; align-items: center; gap: 8px; }
+  .day-label {
+    font-size: 12px; font-weight: 700; color: var(--primary); text-align: center;
+    background: var(--gray-100); border-radius: var(--radius-sm); padding: 4px 0;
+  }
+  .day-row .track-wrap { height: 62px; }
+
+  .track {
+    position: relative; width: 100%; height: 100%; border-radius: 6px;
+    background-color: var(--gray-50);
+    background-image: linear-gradient(to right, rgba(185,28,28,0.05) 1px, transparent 1px);
+    overflow: hidden; background-size: 10% 100%;
+    border: 1px solid var(--border); user-select: none; touch-action: none;
+  }
+  .grid-body.detail-mode .track { cursor: crosshair; }
+
+  .seg {
+    position: absolute; top: 0px; bottom: 0px; border-radius: 5px; font-size: 11px; text-align: center;
+    display: flex; align-items: center; justify-content: center; padding: 2px 6px; overflow: hidden; white-space: nowrap;
+  }
+  .seg.busy { background: var(--gray-100); color: var(--gray-700); border: 1px solid var(--gray-200); }
+  .seg.busy:hover { background: var(--gray-200); }
+  .seg.pending {
+    background: var(--success-bg); color: var(--success); border: 1.5px dashed var(--success-border);
+    cursor: pointer; font-weight: 700;
+  }
+  .seg.pending:hover { background: #D8F1E5; }
+  .seg.preview {
+    background: var(--success-bg); border: 1.5px dashed var(--success-border); color: var(--success);
+    font-weight: 700; pointer-events: none;
+  }
+  .grid-body.detail-mode .seg { font-size: 12px; top: 0px; bottom: 0px; padding: 4px 9px; white-space: normal; line-height: 1.3; }
+
+  .drag-hint { font-size: 11.5px; color: var(--gray-500); margin-top: 8px; text-align: center; }
+
+  .back-btn {
+    display: none; border: 1.5px solid var(--gray-200); background: #fff; color: var(--primary);
+    border-radius: var(--radius-sm); height: 32px; padding: 0 13px; font-size: 12px; cursor: pointer; font-weight: 700;
+    white-space: nowrap; width: fit-content; transition: border-color .12s;
+  }
+  .back-btn.show { display: inline-flex; align-items: center; justify-content: center; }
+  .back-btn:hover { border-color: var(--primary-light); }
+
+  .date-nav {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    display: flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap;
+  }
+  .date-arrow-btn {
+    border: 1.5px solid var(--gray-200); background: #fff; color: var(--gray-700);
+    border-radius: var(--radius-sm); width: 26px; height: 26px; font-size: 14px; font-weight: 700;
+    cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+    line-height: 1; transition: border-color .12s, color .12s; flex-shrink: 0;
+  }
+  .date-arrow-btn:hover { border-color: var(--primary-light); color: var(--primary); }
+  .calendar-btn {
+    border: 1.5px solid var(--gray-200); background: #fff;
+    border-radius: var(--radius-sm); height: 32px; padding: 0 12px; font-size: 13px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 5px; width: fit-content; transition: border-color .12s;
+  }
+  .calendar-btn:hover { border-color: var(--primary-light); }
+  .calendar-input-hidden { position: absolute; width: 0; height: 0; opacity: 0; pointer-events: none; }
+
+  #tooltip { margin-top: 16px; font-size: 12px; color: var(--gray-700); min-height: 18px; padding: 9px 12px; background: var(--gray-50); border-radius: var(--radius-sm); }
+  .legend { margin-top: 12px; font-size: 11.5px; color: var(--gray-500); }
+  .legend .box { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+  .legend .busy-box { background: var(--gray-100); border: 1px solid var(--gray-200); }
+  .legend .free-box { border: 1.5px dashed var(--gray-300); margin-left: 16px; }
+
+  .thumb {
+    width: 100%; aspect-ratio: 16/10; background: linear-gradient(135deg, var(--gray-100), var(--gray-50));
+    border-radius: var(--radius-md); margin-bottom: 14px; display: flex; align-items: center; justify-content: center;
+    color: var(--gray-300); font-size: 12px;
+  }
+  #roomTitle { font-size: 16px; font-weight: 700; margin: 0 0 4px; color: var(--gray-900); }
+  #roomMeta { font-size: 12.5px; color: var(--gray-500); margin: 0 0 16px; }
+
+  .contact-box {
+    background: var(--gray-50); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 10px 12px; margin-bottom: 14px;
+  }
+  .contact-box-title { font-size: 12px; font-weight: 700; color: var(--gray-900); margin-bottom: 6px; }
+  .contact-box-row { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; color: var(--gray-700); padding: 2px 0; }
+  .contact-box-row span { color: var(--gray-500); }
+  .contact-box-row b { font-weight: 600; color: var(--gray-900); }
+  .guideline { background: var(--danger-bg); color: #A33; font-size: 11.5px; padding: 10px 12px; border-radius: var(--radius-sm); margin-bottom: 16px; line-height: 1.65; }
+
+  /* 즐겨찾기 */
+  .star-btn { border: none; background: none; cursor: pointer; font-size: 16px; color: var(--gray-300); padding: 0 2px; line-height: 1; flex-shrink: 0; transition: color .12s; }
+  .star-btn.fav { color: #E0A800; }
+  .room-item { gap: 6px; }
+  .room-item .room-name { flex: 1; display: flex; align-items: center; gap: 6px; }
+  #roomTitleRow { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+  #roomTitleRow #roomTitle { margin-bottom: 0; }
+
+  .fav-filter-row { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--gray-700); margin: 12px 0 4px; cursor: pointer; user-select: none; }
+  .fav-filter-row input { width: 14px; height: 14px; accent-color: #E0A800; }
+
+  /* 신청 유형 버튼 */
+  .apply-btn-row { display: flex; gap: 8px; }
+  .apply-btn-row .btn { font-size: 13px; }
+  .btn-secondary { background: #fff; color: var(--primary); border: 1.5px solid var(--primary); }
+  .btn-secondary:hover { background: var(--gray-50); }
+  .btn-secondary.active { background: var(--primary); color: #fff; }
+
+  /* 대여목적 카테고리 */
+  #purposeCustom { margin-top: 8px; display: none; }
+  #purposeCustom.show { display: block; }
+
+  /* 확인 모달 (일일 대여 신청 / 취소) */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(90,15,15,.5);
+    align-items: center; justify-content: center; z-index: 50; padding: 20px;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal-box { background: #fff; border-radius: var(--radius-md); padding: 24px; width: 340px; max-width: 100%; box-shadow: 0 20px 50px rgba(90,15,15,0.28); }
+  .modal-title { font-size: 15.5px; font-weight: 700; color: var(--gray-900); margin-bottom: 6px; }
+  .modal-desc { font-size: 12.5px; color: var(--gray-500); line-height: 1.6; margin-bottom: 18px; }
+  .modal-actions { display: flex; gap: 8px; }
+  .modal-btn-cancel, .modal-btn-confirm { flex: 1; height: 42px; border-radius: var(--radius-sm); font-size: 13.5px; font-weight: 700; cursor: pointer; border: none; transition: background .12s; }
+  .modal-btn-cancel { background: #fff; border: 1.5px solid var(--gray-200); color: var(--gray-700); }
+  .modal-btn-cancel:hover { background: var(--gray-50); }
+  .modal-btn-confirm { background: var(--primary); color: #fff; }
+  .modal-btn-confirm:hover { background: var(--primary-dark); }
+
+  /* 신청 완료(노란색) 블록 */
+  .seg.applied {
+    background: var(--warning-bg); color: var(--warning); border: 1.5px dashed var(--warning-border);
+    font-weight: 700; cursor: pointer;
+  }
+  .seg.applied:hover { background: #FCE8C6; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title">🏫 동서대학교 강의실 예약</div>
+  <div class="menu">
+    <span>🔔 알림</span>
+    <a href="mypage.html" style="text-decoration: none; color: inherit;"><span>마이페이지</span></a>
+    <a href="login.html" style="text-decoration: none; color: inherit;"><span>로그아웃</span></a>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- LEFT -->
+  <div class="panel" id="leftPanel">
+    <div id="filterView">
+      <h2>조건 검색 &amp; 필터</h2>
+
+      <div class="field building-box">
+        <label>건물 검색<span class="tag-required">(필수)</span></label>
+        <div class="building-search-wrap">
+          <div class="building-input-row">
+            <input type="text" id="buildingInput" placeholder="건물명을 입력하세요" autocomplete="off">
+            <button type="button" class="toggle-btn" id="buildingToggle">▼</button>
+          </div>
+          <div class="building-dropdown" id="buildingDropdown">
+            <div data-b="UIT관">UIT관</div>
+            <div data-b="전자정보관">전자정보관</div>
+            <div data-b="뉴밀레니엄관">뉴밀레니엄관</div>
+          </div>
+        </div>
+        <p id="buildingHint"></p>
+      </div>
+
+      <div class="field">
+        <label>기자재 선택<span class="tag-optional">(선택)</span></label>
+        <div class="toggle-group" id="equipGroup">
+          <div class="toggle-chip" data-val="빔프로젝터">빔프로젝터</div>
+          <div class="toggle-chip" data-val="전자교탁">전자교탁</div>
+          <div class="toggle-chip" data-val="화이트보드">화이트보드</div>
+          <div class="toggle-chip" data-val="VR장비">VR장비</div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>공간유형<span class="tag-optional">(선택)</span></label>
+        <div class="toggle-group" id="typeGroup">
+          <div class="toggle-chip" data-val="일반강의실">일반강의실</div>
+          <div class="toggle-chip" data-val="세미나실">세미나실</div>
+          <div class="toggle-chip" data-val="실습실(PC)">실습실(PC)</div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>인원 슬라이더<span class="tag-required">(필수)</span></label>
+        <input type="range" min="2" max="50" value="10" id="peopleRange">
+        <div class="slider-labels"><span>2명</span><span id="peopleVal">10명</span><span>50명+</span></div>
+      </div>
+
+      <button class="btn" id="searchBtn">검색</button>
+    </div>
+
+    <!-- 검색 결과 뷰 -->
+    <div id="resultView" style="display:none; flex-direction: column; flex: 1;">
+      <div class="result-header">
+        <span id="resultCountLabel">검색 결과</span>
+        <button class="btn-ghost" id="editFilterBtn">필터 수정</button>
+      </div>
+
+      <!-- 결과 내 층 필터 -->
+      <div class="field" style="margin-bottom: 4px; padding-bottom: 12px; border-bottom: 1px solid #E2E5EA;">
+        <label style="font-size: 12px; font-weight: 600; color: #666; margin-bottom: 6px; display: block;">층 필터</label>
+        <select id="resultFloorSelect">
+          <option value="">전체 층</option>
+          <option value="1">1층</option>
+          <option value="2">2층</option>
+          <option value="3">3층</option>
+          <option value="4">4층</option>
+          <option value="5">5층</option>
+          <option value="6">6층</option>
+        </select>
+        <label class="fav-filter-row">
+          <input type="checkbox" id="favOnlyCheck">
+          <span>⭐ 즐겨찾기한 강의실만 보기</span>
+        </label>
+      </div>
+
+      <div id="leftPanelContent">
+        <div id="resultList"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CENTER: 전체 강의실 타임라인 표시 영역 -->
+  <div class="panel">
+    <div class="timeline-nav">
+      <button class="back-btn" id="backToListBtn">← 목록으로</button>
+      <div class="date-nav">
+        <button type="button" class="date-arrow-btn" id="prevDateBtn" title="이전 날짜">‹</button>
+        <span id="centerTitle">2026년 7월 20일 (월) · 전체 보기</span>
+        <button type="button" class="date-arrow-btn" id="nextDateBtn" title="다음 날짜">›</button>
+      </div>
+      <div style="position:relative;">
+        <button type="button" class="calendar-btn" id="calendarBtn" title="날짜로 이동">📅</button>
+        <input type="date" id="calendarInput" class="calendar-input-hidden">
+      </div>
+    </div>
+    <div class="grid-hours">
+      <div></div>
+      <div>09</div><div>10</div><div>11</div><div>12</div><div>13</div>
+      <div>14</div><div>15</div><div>16</div><div>17</div><div>18</div>
+    </div>
+    
+    <!-- 타임라인 리스트 (검색 결과에 따라 행이 추가됨) -->
+    <div class="timeline-list" id="timelineListContainer">
+      <div style="text-align:center; padding: 40px; color:#999; font-size:13px;">왼쪽 패널에서 검색을 진행해주세요.</div>
+    </div>
+
+    <div id="tooltip">회색 블록에 마우스를 올리면 담당 교수님과 수업 정보가 표시됩니다.</div>
+    <div class="legend">
+      <span class="box busy-box"></span>예약불가(수업/대여완료)
+      <span class="box free-box"></span>예약가능
+    </div>
+  </div>
+
+  <!-- RIGHT -->
+  <div class="panel">
+    <h2>선택 공간 상세</h2>
+    <div class="thumb">강의실 사진</div>
+    <div id="roomTitleRow">
+      <p id="roomTitle">강의실을 선택해주세요</p>
+      <button type="button" class="star-btn" id="detailStarBtn" title="즐겨찾기" style="display:none;">☆</button>
+    </div>
+    <p id="roomMeta">수용 인원 및 기자재 정보</p>
+    <div id="contactBox" class="contact-box" style="display:none;">
+      <div class="contact-box-title">📞 문의처</div>
+      <div class="contact-box-row"><span>담당</span><b id="contactDept"></b></div>
+      <div class="contact-box-row"><span>전화</span><b id="contactPhone"></b></div>
+      <div class="contact-box-row"><span>이메일</span><b id="contactEmail"></b></div>
+    </div>
+    <div id="selectedSlotBox" style="display:none; background:#E6F3EB; border:1px solid #2C7A4B; border-radius:6px; padding:8px 10px; font-size:12px; color:#2C7A4B; margin-bottom:14px; font-weight:600;">
+      선택 시간대: <span id="selectedSlotText"></span>
+    </div>
+
+    <div class="field">
+      <label>대여목적</label>
+      <select id="purposeSelect">
+        <option value="">선택해주세요</option>
+        <option value="조별 과제">조별 과제</option>
+        <option value="스터디">스터디</option>
+        <option value="동아리 활동">동아리 활동</option>
+        <option value="세미나/발표 연습">세미나/발표 연습</option>
+        <option value="정규 수업">정규 수업</option>
+        <option value="기타">기타 (직접입력)</option>
+      </select>
+      <input type="text" id="purposeCustom" placeholder="대여 목적을 입력하세요">
+    </div>
+    <div class="field">
+      <label>이용인원</label>
+      <input type="number" placeholder="예: 4">
+    </div>
+
+    <div class="guideline">
+      ※ 실습실 내 음료 반입 금지<br>
+      ※ 대여 10분 전 카카오톡 QR코드 발송
+    </div>
+
+    <div class="apply-btn-row">
+      <button class="btn" id="dailyApplyBtn" type="button">일일 대여 신청</button>
+    </div>
+
+    <div id="applyMessageBox" style="display:none; margin-top:10px; padding:8px 10px; border-radius:6px; font-size:12px; line-height:1.5; white-space:pre-line;"></div>
+  </div>
+
+</div>
+
+<!-- 일일 대여 신청 확인 모달 -->
+<div class="modal-overlay" id="dailyApplyModalOverlay">
+  <div class="modal-box">
+    <div class="modal-title">일일 대여를 신청하시겠습니까?</div>
+    <div class="modal-desc" id="dailyApplyModalDesc"></div>
+    <div class="modal-actions">
+      <button type="button" class="modal-btn-cancel" id="dailyApplyModalCancelBtn">취소</button>
+      <button type="button" class="modal-btn-confirm" id="dailyApplyModalConfirmBtn">신청</button>
+    </div>
+  </div>
+</div>
+
+<!-- 신청 취소 확인 모달 -->
+<div class="modal-overlay" id="cancelAppliedModalOverlay">
+  <div class="modal-box">
+    <div class="modal-title">신청을 취소하시겠습니까?</div>
+    <div class="modal-desc" id="cancelAppliedModalDesc"></div>
+    <div class="modal-actions">
+      <button type="button" class="modal-btn-cancel" id="cancelAppliedModalCancelBtn">닫기</button>
+      <button type="button" class="modal-btn-confirm" id="cancelAppliedModalConfirmBtn">취소하기</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  var VALID_BUILDINGS = ['UIT관', '전자정보관', '뉴밀레니엄관'];
+
+  /* ---------- 건물별 문의처 (선택 공간 상세에 표시) ---------- */
+  var BUILDING_CONTACTS = {
+    'UIT관':      { dept: 'UIT관 시설관리팀', phone: '051-320-1234', email: 'uit-facility@dongseo.ac.kr' },
+    '전자정보관':  { dept: '전자정보관 시설관리팀', phone: '051-320-1235', email: 'eic-facility@dongseo.ac.kr' },
+    '뉴밀레니엄관': { dept: '뉴밀레니엄관 시설관리팀', phone: '051-320-1236', email: 'nm-facility@dongseo.ac.kr' }
+  };
+
+  function renderContactBox(bFullName) {
+    var contact = BUILDING_CONTACTS[bFullName];
+    var box = document.getElementById('contactBox');
+    if (!contact) { box.style.display = 'none'; return; }
+    document.getElementById('contactDept').textContent = contact.dept;
+    document.getElementById('contactPhone').textContent = contact.phone;
+    document.getElementById('contactEmail').textContent = contact.email;
+    box.style.display = 'block';
+  }
+
+  /* ---------- 중앙 타임라인 상단 날짜 이동 (화살표 / 달력) ---------- */
+  var WEEKDAY_KOR = ['일', '월', '화', '수', '목', '금', '토'];
+  var currentViewDate = new Date(2026, 6, 20); // 2026년 7월 20일
+  var currentTitleSuffix = '전체 보기';
+
+  function getDateLabel() {
+    return currentViewDate.getFullYear() + '년 ' + (currentViewDate.getMonth() + 1) + '월 ' +
+      currentViewDate.getDate() + '일 (' + WEEKDAY_KOR[currentViewDate.getDay()] + ')';
+  }
+
+  function setCenterTitle(suffix) {
+    currentTitleSuffix = suffix;
+    document.getElementById('centerTitle').textContent = getDateLabel() + ' · ' + suffix;
+  }
+
+  function refreshCenterTitle() {
+    document.getElementById('centerTitle').textContent = getDateLabel() + ' · ' + currentTitleSuffix;
+  }
+
+  document.getElementById('prevDateBtn').addEventListener('click', function () {
+    currentViewDate.setDate(currentViewDate.getDate() - 1);
+    refreshCenterTitle();
+  });
+
+  document.getElementById('nextDateBtn').addEventListener('click', function () {
+    currentViewDate.setDate(currentViewDate.getDate() + 1);
+    refreshCenterTitle();
+  });
+
+  var calendarInput = document.getElementById('calendarInput');
+  document.getElementById('calendarBtn').addEventListener('click', function () {
+    if (calendarInput.showPicker) {
+      calendarInput.showPicker();
+    } else {
+      calendarInput.focus();
+      calendarInput.click();
+    }
+  });
+
+  calendarInput.addEventListener('change', function () {
+    if (!calendarInput.value) return;
+    var parts = calendarInput.value.split('-').map(Number);
+    currentViewDate = new Date(parts[0], parts[1] - 1, parts[2]);
+    refreshCenterTitle();
+  });
+
+  /* ---------- 건물 검색 (토글 + 직접입력 + 실시간 자동완성) ---------- */
+  var buildingInput = document.getElementById('buildingInput');
+  var buildingHint = document.getElementById('buildingHint');
+  var buildingToggle = document.getElementById('buildingToggle');
+  var buildingDropdown = document.getElementById('buildingDropdown');
+
+  // 건물 목록을 드롭다운에 렌더링 (필터링된 목록을 매번 다시 그림)
+  function renderBuildingOptions(list) {
+    buildingDropdown.innerHTML = list.map(function (b) {
+      return '<div data-b="' + b + '">' + b + '</div>';
+    }).join('');
+  }
+
+  function openDropdownWith(list) {
+    if (!list.length) {
+      closeDropdown();
+      return;
+    }
+    renderBuildingOptions(list);
+    buildingDropdown.classList.add('show');
+    buildingToggle.classList.add('open');
+  }
+
+  function closeDropdown() {
+    buildingDropdown.classList.remove('show');
+    buildingToggle.classList.remove('open');
+  }
+
+  function matchBuildings(query) {
+    var q = query.toLowerCase();
+    return VALID_BUILDINGS.filter(function (b) {
+      return b.toLowerCase().indexOf(q) !== -1;
+    });
+  }
+
+  // ▼ 토글 버튼: 필터와 무관하게 전체 건물 목록을 펼쳐봄
+  buildingToggle.addEventListener('click', function () {
+    if (buildingDropdown.classList.contains('show')) {
+      closeDropdown();
+    } else {
+      openDropdownWith(VALID_BUILDINGS);
+    }
+  });
+
+  // 드롭다운 항목 클릭 (동적으로 다시 그려지므로 이벤트 위임 방식 사용)
+  buildingDropdown.addEventListener('click', function (e) {
+    var item = e.target.closest('div[data-b]');
+    if (!item) return;
+    buildingInput.value = item.getAttribute('data-b');
+    closeDropdown();
+    validateBuilding();
+  });
+
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest('.building-box')) {
+      closeDropdown();
+    }
+  });
+
+  function validateBuilding() {
+    var v = buildingInput.value.trim();
+    if (!v) { buildingHint.textContent = ''; buildingHint.className = ''; return false; }
+    if (VALID_BUILDINGS.indexOf(v) !== -1) {
+      buildingHint.textContent = '"' + v + '" 검색됨';
+      buildingHint.className = 'ok';
+      return true;
+    } else {
+      buildingHint.textContent = '해당 건물이 없습니다.';
+      buildingHint.className = 'none';
+      return false;
+    }
+  }
+
+  // 입력 즉시 실시간 필터링 (대소문자 구분 없이 포함 매칭)
+  buildingInput.addEventListener('input', function () {
+    var v = buildingInput.value.trim();
+    if (!v) {
+      closeDropdown();
+    } else {
+      openDropdownWith(matchBuildings(v));
+    }
+    validateBuilding();
+  });
+
+  // 값이 있는 상태로 다시 포커스하면 해당 값 기준으로 필터링된 목록이 다시 열림
+  buildingInput.addEventListener('focus', function () {
+    var v = buildingInput.value.trim();
+    if (v) openDropdownWith(matchBuildings(v));
+  });
+
+  /* ---------- 기자재 / 공간유형 다중선택 ---------- */
+  ['equipGroup', 'typeGroup'].forEach(function (gid) {
+    document.getElementById(gid).querySelectorAll('.toggle-chip').forEach(function (chip) {
+      chip.addEventListener('click', function () {
+        chip.classList.toggle('active');
+      });
+    });
+  });
+
+  /* ---------- 인원 슬라이더 ---------- */
+  document.getElementById('peopleRange').addEventListener('input', function (e) {
+    document.getElementById('peopleVal').textContent = e.target.value + '명';
+  });
+
+  /* ---------- 층 -> 호수 목록 생성 헬퍼 ---------- */
+  var ROOMS_PER_FLOOR = 3;
+
+  function roomsOfFloor(floor) {
+    var list = [];
+    for (var i = 1; i <= ROOMS_PER_FLOOR; i++) {
+      list.push(floor + '0' + i);
+    }
+    return list;
+  }
+
+  /* ---------- 검색 및 렌더링 로직 ---------- */
+  var roomData = {}; 
+  var CAP_POOL = [15, 20, 25, 30, 40];
+  var EQUIP_SAMPLE = ['칠판, 빔', '칠판, 빔, VR', '칠판, 빔, 전자교탁'];
+
+  function getRoomInfo(room) {
+    if (!roomData[room]) {
+      var idx = parseInt(room, 10) % CAP_POOL.length;
+      roomData[room] = { cap: CAP_POOL[idx], equip: EQUIP_SAMPLE[idx % EQUIP_SAMPLE.length] };
+    }
+    return roomData[room];
+  }
+
+  /* ---------- 타임라인 데이터 & 렌더링 (연속 트랙 방식) ---------- */
+  var TIME_START = 9;   // 09:00
+  var TIME_END = 19;    // 19:00 (총 10시간)
+  var SNAP = 1;           // 1시간 단위로만 예약 가능
+  var PROFESSORS = ['김민수 교수', '이지현 교수', '박철수 교수', '최영희 교수'];
+  var WEEKDAYS = [
+    { key: 'mon', label: '월', fullLabel: '월요일' },
+    { key: 'tue', label: '화', fullLabel: '화요일' },
+    { key: 'wed', label: '수', fullLabel: '수요일' },
+    { key: 'thu', label: '목', fullLabel: '목요일' },
+    { key: 'fri', label: '금', fullLabel: '금요일' }
+  ];
+  var WEEKDAY_LABEL = {};
+  WEEKDAYS.forEach(function (d) { WEEKDAY_LABEL[d.key] = d.fullLabel; });
+
+  // roomKey -> { mon:[...], tue:[...], wed:[...], thu:[...], fri:[...] }, 각 배열 원소: {start,end,type:'busy'|'pending',prof}
+  var schedulesByRoom = {};
+  var favoriteRooms = {};     // roomKey -> true (즐겨찾기 등록된 강의실)
+  var currentBFullName = '';
+  var currentPrefix = '';
+  var detailMode = false;
+  var dragState = null;
+  var lastSelectedSlot = null; // {roomKey, roomLabel, day, start, end} - 드래그로 선택된 시간대
+  var currentRoomKey = null; // 현재 상세보기 중인 강의실
+
+  // 임의 스케줄 생성 (UI 시각화 용도) - 겹치지 않는 구간만 만들어서
+  // 자연스럽게 병합된 형태로 나오므로 뚝뚝 끊기는 블록이 생기지 않음
+  function generateSchedule() {
+    var blocks = [];
+    var t = TIME_START;
+    var durOptions = [1, 1, 2];
+    while (t < TIME_END) {
+      if (Math.random() > 0.62 && (TIME_END - t) >= 1) {
+        var dur = Math.min(durOptions[Math.floor(Math.random() * durOptions.length)], TIME_END - t);
+        var prof = PROFESSORS[Math.floor(Math.random() * PROFESSORS.length)];
+        blocks.push({ start: t, end: t + dur, prof: prof, type: 'busy' });
+        t += dur;
+      } else {
+        t += SNAP;
+      }
+    }
+    return blocks;
+  }
+
+  // 월~금 5일치 스케줄을 한 번에 생성
+  function generateWeekSchedule() {
+    var week = {};
+    WEEKDAYS.forEach(function (d) { week[d.key] = generateSchedule(); });
+    return week;
+  }
+
+  function timeLabel(h) {
+    var hh = Math.floor(h);
+    var mm = Math.round((h - hh) * 60);
+    return (hh < 10 ? '0' : '') + hh + ':' + (mm === 0 ? '00' : mm);
+  }
+
+  function segStyle(b) {
+    var left = ((b.start - TIME_START) / (TIME_END - TIME_START)) * 100;
+    var width = ((b.end - b.start) / (TIME_END - TIME_START)) * 100;
+    return 'left:' + left + '%; width:' + width + '%;';
+  }
+
+  function renderTrack(roomKey, day) {
+    var blocks = (schedulesByRoom[roomKey] && schedulesByRoom[roomKey][day]) || [];
+    var html = '';
+    blocks.forEach(function (b) {
+      if (b.type === 'busy') {
+        html += '<div class="seg busy" style="' + segStyle(b) + '" data-info="' + b.prof + ' · ' + timeLabel(b.start) + '-' + timeLabel(b.end) + ' 수업">' + b.prof + '</div>';
+      } else if (b.type === 'pending') {
+        html += '<div class="seg pending" data-start="' + b.start + '" data-end="' + b.end + '" style="' + segStyle(b) + '">예약 신청 ' + timeLabel(b.start) + '-' + timeLabel(b.end) + '</div>';
+      } else if (b.type === 'applied') {
+        html += '<div class="seg applied" data-start="' + b.start + '" data-end="' + b.end + '" style="' + segStyle(b) + '">신청 완료 ' + timeLabel(b.start) + '-' + timeLabel(b.end) + '</div>';
+      }
+    });
+    return html;
+  }
+
+  function snapHour(h) {
+    return Math.min(TIME_END - SNAP, Math.max(TIME_START, Math.floor(h / SNAP) * SNAP));
+  }
+
+  function defaultTooltipText() {
+    return detailMode
+      ? '빈 트랙을 드래그하면 1시간 단위로 예약을 신청할 수 있습니다. (초록 블록 클릭 시 취소, 노란 블록은 신청 완료된 예약)'
+      : '회색 블록에 마우스를 올리면 담당 교수님과 수업 정보가 표시됩니다.';
+  }
+
+  function buildRoomRow(f, r, prefix, bFullName, info) {
+    var roomKey = f + '_' + r;
+    var roomNameStr = prefix + r;
+    if (!schedulesByRoom[roomKey]) schedulesByRoom[roomKey] = generateWeekSchedule();
+
+    var isFav = !!favoriteRooms[roomKey];
+
+    var item = document.createElement('div');
+    item.className = 'room-item';
+    item.setAttribute('data-floor', f);
+    item.setAttribute('data-room', r);
+    item.setAttribute('data-roomkey', roomKey);
+    item.innerHTML =
+      '<span class="room-name">' +
+      '<button type="button" class="star-btn' + (isFav ? ' fav' : '') + '" data-star="' + roomKey + '">' + (isFav ? '★' : '☆') + '</button>' +
+      roomNameStr + '</span><span class="type">실습실</span>';
+
+    // 상세보기용 요일별(월~금) 트랙 마크업
+    var weekHtml = WEEKDAYS.map(function (d) {
+      return '<div class="day-row">' +
+        '<div class="day-label">' + d.label + '</div>' +
+        '<div class="track-wrap"><div class="track" data-roomkey="' + roomKey + '" data-day="' + d.key + '">' + renderTrack(roomKey, d.key) + '</div></div>' +
+        '</div>';
+    }).join('');
+
+    var timelineRow = document.createElement('div');
+    timelineRow.className = 'grid-body timeline-row';
+    timelineRow.setAttribute('data-floor', f);
+    timelineRow.setAttribute('data-room', r);
+    timelineRow.setAttribute('data-roomkey', roomKey);
+    timelineRow.innerHTML =
+      '<div class="room-tag">' + roomNameStr + '</div>' +
+      '<div>' +
+      '<div class="track-wrap compact-track"><div class="track" data-roomkey="' + roomKey + '" data-day="mon">' + renderTrack(roomKey, 'mon') + '</div></div>' +
+      '<div class="week-view">' + weekHtml + '</div>' +
+      '</div>';
+
+    var clickHandler = function (e) {
+      if (e.target.closest('.star-btn')) return; // 즐겨찾기 별 클릭 시에는 강의실 선택 동작을 하지 않음
+      selectRoom(item, timelineRow, prefix, r, bFullName, info, roomKey);
+    };
+    item.addEventListener('click', clickHandler); // 항목 전체(여백 포함) 클릭 가능하도록 item 자체에 리스너 등록
+    // 타임라인 행 자체를 클릭해도 강의실이 선택되지 않도록 함 (좌측 목록 클릭 시에만 상세보기로 전환)
+
+    return { item: item, timelineRow: timelineRow };
+  }
+
+  // 즐겨찾기 토글 (이벤트 위임: 좌측 목록 + 상세 패널 별 버튼 공용)
+  function toggleFavorite(roomKey) {
+    favoriteRooms[roomKey] = !favoriteRooms[roomKey];
+    var isFav = !!favoriteRooms[roomKey];
+
+    document.querySelectorAll('.star-btn[data-star="' + roomKey + '"]').forEach(function (btn) {
+      btn.classList.toggle('fav', isFav);
+      btn.textContent = isFav ? '★' : '☆';
+    });
+
+    var detailStar = document.getElementById('detailStarBtn');
+    if (detailStar.getAttribute('data-roomkey') === roomKey) {
+      detailStar.classList.toggle('fav', isFav);
+      detailStar.textContent = isFav ? '★' : '☆';
+    }
+
+    if (document.getElementById('favOnlyCheck').checked) applyFloorFilter();
+  }
+
+  document.getElementById('resultList').addEventListener('click', function (e) {
+    var starBtn = e.target.closest('.star-btn');
+    if (!starBtn) return;
+    e.stopPropagation();
+    toggleFavorite(starBtn.getAttribute('data-star'));
+  });
+
+  document.getElementById('detailStarBtn').addEventListener('click', function () {
+    var roomKey = this.getAttribute('data-roomkey');
+    if (roomKey) toggleFavorite(roomKey);
+  });
+
+  document.getElementById('favOnlyCheck').addEventListener('change', function () {
+    if (detailMode) exitDetailMode();
+    applyFloorFilter();
+  });
+
+  document.getElementById('searchBtn').addEventListener('click', function () {
+    if (!validateBuilding()) {
+      buildingHint.textContent = buildingInput.value.trim() ? '해당 건물이 없습니다.' : '건물 검색은 필수 입력입니다.';
+      buildingHint.className = 'none';
+      buildingInput.focus();
+      return;
+    }
+
+    var bName = buildingInput.value.trim();
+    var bFullName = bName;
+    var prefix = bName === 'UIT관' ? 'U' : (bName === '뉴밀레니엄관' ? '뉴' : '전');
+    currentBFullName = bFullName;
+    currentPrefix = prefix;
+
+    var resultList = document.getElementById('resultList');
+    var timelineListContainer = document.getElementById('timelineListContainer');
+
+    resultList.innerHTML = '';
+    timelineListContainer.innerHTML = ''; // 타임라인 컨테이너 초기화
+    schedulesByRoom = {};                  // 새 검색 시 스케줄 초기화
+    exitDetailMode(true);
+
+    var allFloors = ['1', '2', '3', '4', '5', '6'];
+
+    // 전체 1~6층 데이터 렌더링
+    allFloors.forEach(function (f) {
+      var rooms = roomsOfFloor(f);
+
+      // 왼쪽 목록 층 라벨
+      var floorLabel = document.createElement('div');
+      floorLabel.className = 'floor-label';
+      floorLabel.setAttribute('data-floor', f);
+      floorLabel.textContent = f + '층';
+      resultList.appendChild(floorLabel);
+
+      rooms.forEach(function (r) {
+        var info = getRoomInfo(r);
+        var built = buildRoomRow(f, r, prefix, bFullName, info);
+        resultList.appendChild(built.item);
+        timelineListContainer.appendChild(built.timelineRow);
+      });
+    });
+
+    document.getElementById('filterView').style.display = 'none';
+
+    // 강제 스타일 덮어쓰기 로직 제거하고 classList 이용 (display: flex 유지를 위함)
+    document.getElementById('resultView').style.display = 'flex';
+    setCenterTitle(bFullName);
+
+    // 층 필터 초기화 후 전체 노출 상태로 결과 건수 표시
+    resultFloorSelect.value = "";
+    applyFloorFilter();
+  });
+
+  /* ---------- 결과 내 층 필터 ---------- */
+  var resultFloorSelect = document.getElementById('resultFloorSelect');
+  resultFloorSelect.addEventListener('change', function () {
+    if (detailMode) exitDetailMode(); // 다른 층 필터 선택 시 상세보기 해제
+    applyFloorFilter();
+  });
+
+  function applyFloorFilter() {
+    var selectedFloor = resultFloorSelect.value;
+    var favOnly = document.getElementById('favOnlyCheck').checked;
+    var visibleCount = 0;
+
+    // 1) 왼쪽 목록 필터링 (층 라벨 + 강의실 항목) - 층 라벨은 소속 강의실이 하나라도 보일 때만 표시
+    var leftItems = document.getElementById('resultList').children;
+    var pendingLabel = null;
+    var pendingLabelHasVisible = false;
+    for (var i = 0; i < leftItems.length; i++) {
+      var el = leftItems[i];
+
+      if (el.classList.contains('floor-label')) {
+        if (pendingLabel) pendingLabel.style.display = pendingLabelHasVisible ? 'block' : 'none';
+        pendingLabel = el;
+        pendingLabelHasVisible = false;
+      } else if (el.classList.contains('room-item')) {
+        var elFloor = el.getAttribute('data-floor');
+        var elRoomKey = el.getAttribute('data-roomkey');
+        var floorMatch = !selectedFloor || selectedFloor === elFloor;
+        var favMatch = !favOnly || !!favoriteRooms[elRoomKey];
+        var match = floorMatch && favMatch;
+
+        el.style.display = match ? 'flex' : 'none';
+        if (match) { visibleCount++; pendingLabelHasVisible = true; }
+      }
+    }
+    if (pendingLabel) pendingLabel.style.display = pendingLabelHasVisible ? 'block' : 'none';
+
+    document.getElementById('resultCountLabel').textContent = '검색 결과 ' + visibleCount + '건';
+
+    // 2) 가운데 타임라인 필터링 (상세보기 중이 아닐 때만 적용)
+    if (!detailMode) {
+      document.querySelectorAll('.timeline-row').forEach(function (row) {
+        var rowFloor = row.getAttribute('data-floor');
+        var rowRoomKey = row.getAttribute('data-roomkey');
+        var floorMatch = !selectedFloor || selectedFloor === rowFloor;
+        var favMatch = !favOnly || !!favoriteRooms[rowRoomKey];
+        row.style.display = (floorMatch && favMatch) ? 'grid' : 'none';
+      });
+    }
+  }
+
+  document.getElementById('editFilterBtn').addEventListener('click', function () {
+    document.getElementById('filterView').style.display = 'block';
+    document.getElementById('resultView').style.display = 'none';
+    document.getElementById('timelineListContainer').innerHTML = '<div style="text-align:center; padding: 40px; color:#999; font-size:13px;">왼쪽 패널에서 검색을 진행해주세요.</div>';
+    setCenterTitle('전체 보기');
+    document.getElementById('roomTitle').textContent = '강의실을 선택해주세요';
+    document.getElementById('roomMeta').textContent = '수용 인원 및 기자재 정보';
+    document.getElementById('contactBox').style.display = 'none';
+    document.getElementById('detailStarBtn').style.display = 'none';
+    exitDetailMode(true);
+  });
+
+  // 활성화 및 우측 상세 정보 업데이트
+  function selectRoom(leftItem, timelineRow, prefix, room, bFullName, info, roomKey) {
+    // 모든 활성화 상태 초기화
+    document.querySelectorAll('.room-item').forEach(function (r) { r.classList.remove('active'); });
+    document.querySelectorAll('.timeline-row').forEach(function (r) { r.classList.remove('active'); });
+
+    // 클릭된 요소 활성화
+    leftItem.classList.add('active');
+    timelineRow.classList.add('active');
+
+    // 우측 상세 패널 업데이트
+    document.getElementById('roomTitle').textContent = bFullName + ' ' + prefix + room + '호';
+    document.getElementById('roomMeta').textContent = '수용 ' + info.cap + '명 · ' + info.equip;
+    renderContactBox(bFullName);
+    currentRoomKey = roomKey;
+    renderSelectedSlotsSummary(roomKey);
+    lastSelectedSlot = null;
+
+    // 즐겨찾기 별 아이콘 갱신
+    var isFav = !!favoriteRooms[roomKey];
+    var detailStar = document.getElementById('detailStarBtn');
+    detailStar.style.display = 'inline-block';
+    detailStar.setAttribute('data-roomkey', roomKey);
+    detailStar.classList.toggle('fav', isFav);
+    detailStar.textContent = isFav ? '★' : '☆';
+
+    // 강의실 호수를 클릭하면 해당 강의실 스케줄만 실시간 타임라인에 크게 표시
+    enterDetailMode(timelineRow, roomKey);
+  }
+
+  function enterDetailMode(timelineRow, roomKey) {
+    detailMode = true;
+    document.querySelectorAll('.timeline-row').forEach(function (row) {
+      if (row === timelineRow) {
+        row.classList.add('detail-mode');
+        row.style.display = 'grid';
+      } else {
+        row.classList.remove('detail-mode');
+        row.style.display = 'none';
+      }
+    });
+    document.getElementById('backToListBtn').classList.add('show');
+    var roomLabel = timelineRow.querySelector('.room-tag').textContent;
+    setCenterTitle(roomLabel);
+    document.getElementById('tooltip').textContent = defaultTooltipText();
+  }
+
+  function exitDetailMode(skipTitleReset) {
+    detailMode = false;
+    document.querySelectorAll('.timeline-row').forEach(function (row) { row.classList.remove('detail-mode'); });
+    document.getElementById('backToListBtn').classList.remove('show');
+    if (!skipTitleReset) {
+      setCenterTitle(currentBFullName);
+    }
+    document.getElementById('selectedSlotBox').style.display = 'none';
+    lastSelectedSlot = null;
+    document.getElementById('tooltip').textContent = defaultTooltipText();
+    applyFloorFilter();
+  }
+
+  document.getElementById('backToListBtn').addEventListener('click', function () {
+    exitDetailMode();
+  });
+
+  /* ---------- 타임라인 호버 (이벤트 위임 방식 적용) ---------- */
+  // 동적으로 생성되는 타임라인 블록들을 위해 부모 컨테이너에 이벤트 등록
+  var timelineContainer = document.getElementById('timelineListContainer');
+  timelineContainer.addEventListener('mouseover', function (e) {
+    if (e.target.classList.contains('busy')) {
+      document.getElementById('tooltip').textContent = e.target.getAttribute('data-info');
+    }
+  });
+  timelineContainer.addEventListener('mouseout', function (e) {
+    if (e.target.classList.contains('busy')) {
+      document.getElementById('tooltip').textContent = defaultTooltipText();
+    }
+  });
+
+  /* ---------- 드래그 앤 드롭으로 예약 시간대 지정 (상세보기 모드에서만 동작) ---------- */
+  timelineContainer.addEventListener('pointerdown', function (e) {
+    var track = e.target.closest('.track');
+    if (!track) return;
+    var row = track.closest('.timeline-row');
+    if (!row || !row.classList.contains('detail-mode')) return; // 상세보기 중인 강의실에서만 예약 가능
+    if (e.target.closest('.seg')) return; // 기존 블록 위에서는 드래그 시작 안 함
+
+    var rect = track.getBoundingClientRect();
+    var roomKey = track.getAttribute('data-roomkey');
+    var day = track.getAttribute('data-day');
+    var startFrac = (e.clientX - rect.left) / rect.width;
+    var startHour = snapHour(TIME_START + startFrac * (TIME_END - TIME_START));
+
+    var preview = document.createElement('div');
+    preview.className = 'seg preview';
+    track.appendChild(preview);
+
+    dragState = { track: track, roomKey: roomKey, day: day, startHour: startHour, previewEl: preview, finalStart: startHour, finalEnd: startHour + SNAP };
+    updatePreview();
+
+    if (track.setPointerCapture) { try { track.setPointerCapture(e.pointerId); } catch (err) {} }
+    e.preventDefault();
+  });
+
+  timelineContainer.addEventListener('pointermove', function (e) {
+    if (!dragState) return;
+    var rect = dragState.track.getBoundingClientRect();
+    var frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    var hour = snapHour(TIME_START + frac * (TIME_END - TIME_START));
+    dragState.currentHour = hour;
+    updatePreview();
+  });
+
+  function updatePreview() {
+    if (!dragState) return;
+    var s = Math.min(dragState.startHour, dragState.currentHour !== undefined ? dragState.currentHour : dragState.startHour);
+    var en = Math.max(dragState.startHour, dragState.currentHour !== undefined ? dragState.currentHour : dragState.startHour);
+    if (en - s < SNAP) en = s + SNAP;
+    en = Math.min(en, TIME_END);
+    dragState.finalStart = s;
+    dragState.finalEnd = en;
+    dragState.previewEl.style.left = (((s - TIME_START) / (TIME_END - TIME_START)) * 100) + '%';
+    dragState.previewEl.style.width = (((en - s) / (TIME_END - TIME_START)) * 100) + '%';
+    dragState.previewEl.textContent = timeLabel(s) + ' - ' + timeLabel(en);
+  }
+
+  // 바로 옆에 붙거나 겹치는 초록(예약 신청) 블록들을 하나로 합침
+  function mergeAdjacentPending(roomKey, day, touchStart, touchEnd) {
+    var blocks = schedulesByRoom[roomKey][day];
+    var others = blocks.filter(function (b) { return b.type !== 'pending'; });
+    var pendingBlocks = blocks.filter(function (b) { return b.type === 'pending'; })
+      .sort(function (a, b) { return a.start - b.start; });
+
+    var merged = [];
+    pendingBlocks.forEach(function (b) {
+      var last = merged[merged.length - 1];
+      if (last && b.start <= last.end) {
+        last.end = Math.max(last.end, b.end);
+      } else {
+        merged.push({ start: b.start, end: b.end, type: 'pending' });
+      }
+    });
+
+    schedulesByRoom[roomKey][day] = others.concat(merged);
+
+    var result = merged.filter(function (b) { return b.start <= touchStart && b.end >= touchEnd; })[0];
+    return result || { start: touchStart, end: touchEnd };
+  }
+
+  // 해당 강의실에 드래그로 선택된(초록) 시간대 전체를 요약해서 selectedSlotBox에 표시
+  function renderSelectedSlotsSummary(roomKey) {
+    var byRoom = schedulesByRoom[roomKey] || {};
+    var entries = [];
+    WEEKDAYS.forEach(function (d) {
+      (byRoom[d.key] || []).forEach(function (b) {
+        if (b.type === 'pending') entries.push({ day: d.key, start: b.start, end: b.end });
+      });
+    });
+
+    var box = document.getElementById('selectedSlotBox');
+    if (!entries.length) {
+      box.style.display = 'none';
+      document.getElementById('selectedSlotText').textContent = '';
+      return;
+    }
+
+    var text = entries.map(function (e) {
+      return WEEKDAY_LABEL[e.day] + ' ' + timeLabel(e.start) + '~' + timeLabel(e.end);
+    }).join(', ');
+    box.style.display = 'block';
+    document.getElementById('selectedSlotText').textContent = text;
+  }
+
+  window.addEventListener('pointerup', function () {
+    if (!dragState) return;
+    var s = dragState.finalStart, en = dragState.finalEnd;
+    var roomKey = dragState.roomKey;
+    var day = dragState.day;
+    var track = dragState.track;
+    if (dragState.previewEl && dragState.previewEl.parentNode) track.removeChild(dragState.previewEl);
+
+    var dayBlocks = (schedulesByRoom[roomKey] && schedulesByRoom[roomKey][day]) || [];
+    var overlap = dayBlocks.some(function (b) { return s < b.end && en > b.start; });
+
+    if (!overlap && (en - s) >= SNAP) {
+      schedulesByRoom[roomKey][day].push({ start: s, end: en, type: 'pending' });
+      var mergedBlock = mergeAdjacentPending(roomKey, day, s, en);
+      track.innerHTML = renderTrack(roomKey, day);
+      renderSelectedSlotsSummary(roomKey);
+      lastSelectedSlot = {
+        roomKey: roomKey,
+        roomLabel: document.getElementById('roomTitle').textContent,
+        day: day, start: mergedBlock.start, end: mergedBlock.end
+      };
+    } else if (overlap) {
+      document.getElementById('tooltip').textContent = '이미 예약된 시간과 겹칩니다. 다른 시간대를 선택해주세요.';
+      setTimeout(function () { document.getElementById('tooltip').textContent = defaultTooltipText(); }, 2200);
+    }
+    dragState = null;
+  });
+
+  // 초록색(예약 신청) 블록을 클릭하면 즉시 취소
+  timelineContainer.addEventListener('click', function (e) {
+    var applied = e.target.closest('.applied');
+    if (applied) {
+      e.stopPropagation();
+      openCancelAppliedModal(applied);
+      return;
+    }
+
+    var pending = e.target.closest('.pending');
+    if (!pending) return;
+    e.stopPropagation();
+
+    var track = pending.closest('.track');
+    var roomKey = track.getAttribute('data-roomkey');
+    var day = track.getAttribute('data-day');
+    var start = parseFloat(pending.getAttribute('data-start'));
+    var end = parseFloat(pending.getAttribute('data-end'));
+    schedulesByRoom[roomKey][day] = (schedulesByRoom[roomKey][day] || []).filter(function (b) {
+      return !(b.type === 'pending' && b.start === start && b.end === end);
+    });
+    track.innerHTML = renderTrack(roomKey, day);
+    renderSelectedSlotsSummary(roomKey);
+    lastSelectedSlot = null;
+    document.getElementById('tooltip').textContent = '예약 신청이 취소되었습니다.';
+    setTimeout(function () { document.getElementById('tooltip').textContent = defaultTooltipText(); }, 1800);
+  });
+
+  // 특정 강의실의 모든 요일 트랙을 다시 그림 (신청/취소 후 갱신용)
+  function renderAllTracksForRoom(roomKey) {
+    document.querySelectorAll('.track[data-roomkey="' + roomKey + '"]').forEach(function (track) {
+      var day = track.getAttribute('data-day');
+      track.innerHTML = renderTrack(roomKey, day);
+    });
+  }
+
+  /* ---------- 대여목적 카테고리 (기타 선택 시 직접입력 노출) ---------- */
+  document.getElementById('purposeSelect').addEventListener('change', function () {
+    var customInput = document.getElementById('purposeCustom');
+    if (this.value === '기타') {
+      customInput.classList.add('show');
+      customInput.focus();
+    } else {
+      customInput.classList.remove('show');
+      customInput.value = '';
+    }
+  });
+
+  /* ---------- alert() 대신 사용할 인라인 메시지 표시 함수 ---------- */
+  // 일부 미리보기/샌드박스 환경에서는 alert()/confirm()이 차단될 수 있으므로,
+  // 결과를 항상 화면에 보이는 인라인 박스로 표시한다.
+  var applyMsgTimer = null;
+  function showApplyMessage(text, type) {
+    var box = document.getElementById('applyMessageBox');
+    clearTimeout(applyMsgTimer);
+    box.textContent = text;
+    box.style.display = 'block';
+    if (type === 'error') {
+      box.style.background = '#FBEEEE';
+      box.style.color = '#A33';
+      box.style.border = '1px solid #E0A0A0';
+    } else {
+      box.style.background = '#E6F3EB';
+      box.style.color = '#2C7A4B';
+      box.style.border = '1px solid #2C7A4B';
+    }
+    applyMsgTimer = setTimeout(function () { box.style.display = 'none'; }, 4000);
+  }
+
+  /* ---------- 일일 대여 신청 (확인 모달 → 신청 → 노란색 표시) ---------- */
+  var dailyApplyModalOverlay = document.getElementById('dailyApplyModalOverlay');
+  var cancelAppliedModalOverlay = document.getElementById('cancelAppliedModalOverlay');
+  var pendingCancelTarget = null; // { roomKey, day, start, end }
+
+  document.getElementById('dailyApplyBtn').addEventListener('click', function () {
+    var slotBox = document.getElementById('selectedSlotBox');
+    if (slotBox.style.display === 'none') {
+      showApplyMessage('먼저 강의실 상세보기에서 예약할 시간대를 드래그로 선택해주세요.', 'error');
+      return;
+    }
+
+    var purpose = document.getElementById('purposeSelect').value === '기타'
+      ? document.getElementById('purposeCustom').value
+      : document.getElementById('purposeSelect').value;
+
+    var desc = document.getElementById('roomTitle').textContent + '<br>선택 시간대: ' +
+      document.getElementById('selectedSlotText').textContent +
+      (purpose ? ('<br>대여목적: ' + purpose) : '');
+    document.getElementById('dailyApplyModalDesc').innerHTML = desc;
+    dailyApplyModalOverlay.classList.add('show');
+  });
+
+  document.getElementById('dailyApplyModalCancelBtn').addEventListener('click', function () {
+    dailyApplyModalOverlay.classList.remove('show');
+  });
+
+  document.getElementById('dailyApplyModalConfirmBtn').addEventListener('click', function () {
+    var roomKey = currentRoomKey;
+    if (!roomKey || !schedulesByRoom[roomKey]) {
+      dailyApplyModalOverlay.classList.remove('show');
+      return;
+    }
+
+    var purpose = document.getElementById('purposeSelect').value === '기타'
+      ? document.getElementById('purposeCustom').value
+      : document.getElementById('purposeSelect').value;
+
+    var selectedSlotText = document.getElementById('selectedSlotText').textContent;
+
+    // 이 강의실의 모든 pending(초록) 블록을 applied(노란색)로 전환
+    WEEKDAYS.forEach(function (d) {
+      var blocks = schedulesByRoom[roomKey][d.key] || [];
+      blocks.forEach(function (b) {
+        if (b.type === 'pending') b.type = 'applied';
+      });
+    });
+    renderAllTracksForRoom(roomKey);
+    renderSelectedSlotsSummary(roomKey);
+
+    dailyApplyModalOverlay.classList.remove('show');
+    showApplyMessage('일일 대여 신청이 완료되었습니다.\n선택 시간대: ' + selectedSlotText + (purpose ? ('\n대여목적: ' + purpose) : ''), 'success');
+  });
+
+  /* ---------- 신청 완료(노란색) 블록 클릭 → 취소 확인 모달 ---------- */
+  function openCancelAppliedModal(appliedEl) {
+    var track = appliedEl.closest('.track');
+    var roomKey = track.getAttribute('data-roomkey');
+    var day = track.getAttribute('data-day');
+    var start = parseFloat(appliedEl.getAttribute('data-start'));
+    var end = parseFloat(appliedEl.getAttribute('data-end'));
+    pendingCancelTarget = { roomKey: roomKey, day: day, start: start, end: end };
+
+    document.getElementById('cancelAppliedModalDesc').innerHTML =
+      WEEKDAY_LABEL[day] + ' ' + timeLabel(start) + '~' + timeLabel(end) + ' 신청 건을 취소합니다.';
+    cancelAppliedModalOverlay.classList.add('show');
+  }
+
+  document.getElementById('cancelAppliedModalCancelBtn').addEventListener('click', function () {
+    pendingCancelTarget = null;
+    cancelAppliedModalOverlay.classList.remove('show');
+  });
+
+  document.getElementById('cancelAppliedModalConfirmBtn').addEventListener('click', function () {
+    if (!pendingCancelTarget) {
+      cancelAppliedModalOverlay.classList.remove('show');
+      return;
+    }
+    var t = pendingCancelTarget;
+    schedulesByRoom[t.roomKey][t.day] = (schedulesByRoom[t.roomKey][t.day] || []).filter(function (b) {
+      return !(b.type === 'applied' && b.start === t.start && b.end === t.end);
+    });
+    renderAllTracksForRoom(t.roomKey);
+    if (t.roomKey === currentRoomKey) renderSelectedSlotsSummary(t.roomKey);
+
+    pendingCancelTarget = null;
+    cancelAppliedModalOverlay.classList.remove('show');
+    showApplyMessage('신청이 취소되었습니다.', 'success');
+  });
+</script>
+
+</body>
+</html>

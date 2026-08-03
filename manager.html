@@ -1,0 +1,1775 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>중간관리자 · 동서대학교 공간 예약 시스템</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+<style>
+  :root {
+    --primary: #B91C1C; --primary-dark: #7F1010; --primary-light: #D64545;
+    --accent: #C2410C;
+    --success: #12805C; --success-bg: #E6F6EF; --success-border: #9BD9BE;
+    --warning: #B7791F; --warning-bg: #FDF3E2; --warning-border: #F0CE8C;
+    --danger: #C13A3A; --danger-bg: #FCEBEB; --danger-border: #F0AFAF;
+    --info: #1D5FA8; --info-bg: #E6F0FB; --info-border: #A9C9EE;
+    --gray-900: #1A1D23; --gray-700: #454B54; --gray-500: #767D89;
+    --gray-300: #D8DCE2; --gray-200: #E7E9ED; --gray-100: #F1F3F6; --gray-50: #F8F9FB;
+    --border: #E4E7EC;
+    --shadow-sm: 0 1px 2px rgba(16,24,40,0.05);
+    --shadow-md: 0 4px 16px rgba(16,24,40,0.08);
+    --shadow-lg: 0 20px 50px rgba(90,15,15,0.28);
+    --radius-sm: 8px; --radius-md: 12px; --radius-lg: 16px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Pretendard", -apple-system, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+    background: var(--gray-50);
+    color: var(--gray-900);
+  }
+
+  /* ---------- 로그인 화면 ---------- */
+  #loginScreen {
+    position: fixed; inset: 0;
+    background: linear-gradient(135deg, #7F1010 0%, #B91C1C 60%, #DC5F45 100%);
+    display: flex; align-items: center; justify-content: center; z-index: 100;
+  }
+  #loginScreen.hide { display: none; }
+  .login-card {
+    background: #fff; border-radius: var(--radius-lg); padding: 36px; width: 400px;
+    box-shadow: var(--shadow-lg);
+  }
+  .login-card h1 { font-size: 19px; color: var(--gray-900); margin: 0 0 6px; font-weight: 700; letter-spacing: -0.3px; }
+  .login-card p { font-size: 12.5px; color: var(--gray-500); margin: 0 0 24px; }
+  .login-manager-list { display: flex; flex-direction: column; gap: 10px; }
+  .login-manager-btn {
+    text-align: left; border: 1.5px solid var(--gray-200); border-radius: var(--radius-sm); padding: 13px 15px;
+    background: #fff; cursor: pointer; transition: all .12s;
+  }
+  .login-manager-btn:hover { border-color: var(--primary-light); background: var(--gray-50); }
+  .login-manager-btn .lm-name { font-size: 14px; font-weight: 700; color: var(--primary); }
+  .login-manager-btn .lm-rooms { font-size: 11.5px; color: var(--gray-500); margin-top: 4px; }
+
+  #appRoot { display: none; }
+  #appRoot.show { display: block; }
+
+  header {
+    background: var(--primary);
+    color: #fff;
+    padding: 15px 30px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: relative;
+    z-index: 20;
+  }
+  header .title { font-size: 17px; font-weight: 700; letter-spacing: -0.2px; }
+  header .title .badge {
+    display: inline-block; margin-left: 10px; font-size: 11px; font-weight: 700;
+    background: #E8A93B; color: var(--primary-dark); padding: 3px 9px; border-radius: 100px; vertical-align: 2px;
+  }
+  header .menu { font-size: 13px; color: rgba(255,255,255,0.72); display: flex; align-items: center; gap: 18px; }
+  header .menu .manager-name { font-weight: 700; color: #fff; }
+  header .menu span { cursor: pointer; position: relative; transition: color .12s; }
+  header .menu span:hover { color: #fff; }
+  header .menu .bell-dot {
+    position: absolute; top: -4px; right: -8px; width: 7px; height: 7px; border-radius: 50%;
+    background: #E4572E; border: 1.5px solid var(--primary);
+  }
+
+  .subbar {
+    background: #fff; border-bottom: 1px solid var(--border);
+    padding: 11px 30px; display: flex; align-items: center; justify-content: space-between;
+  }
+  .subbar-crumb { font-size: 12px; color: var(--gray-500); }
+  .subbar-actions { display: flex; align-items: center; gap: 10px; }
+  .subbar-badge {
+    font-size: 12px; font-weight: 700; color: var(--warning); background: var(--warning-bg);
+    border: 1px solid var(--warning-border); border-radius: 100px; padding: 5px 12px;
+  }
+  .subbar-link {
+    font-size: 12px; font-weight: 700; color: var(--primary); background: none;
+    border: 1.5px solid var(--gray-200); border-radius: var(--radius-sm); padding: 7px 11px; cursor: pointer; transition: all .12s;
+  }
+  .subbar-link:hover { background: var(--gray-50); border-color: var(--primary-light); }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 260px 1fr 310px;
+    gap: 18px;
+    padding: 22px;
+    align-items: start;
+  }
+  .panel {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--shadow-sm);
+  }
+  .panel h2 { font-size: 14.5px; font-weight: 700; margin: 0 0 4px; color: var(--gray-900); }
+  .panel .section-sub { font-size: 11.5px; color: var(--gray-500); margin: 0 0 14px; }
+
+  .filter-block { margin-bottom: 20px; }
+  .filter-block .flabel {
+    font-size: 12px; font-weight: 700; color: var(--gray-700); margin-bottom: 9px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .filter-block .flabel::before { content: ""; width: 6px; height: 6px; border-radius: 2px; background: var(--primary); }
+
+  /* 담당 강의실 목록 (라디오형) */
+  .radio-group { display: flex; flex-direction: column; gap: 7px; max-height: 320px; overflow-y: auto; padding-right: 2px; }
+  .radio-item {
+    display: flex; align-items: center; gap: 9px;
+    padding: 9px 12px; border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+    font-size: 13px; cursor: pointer; transition: all .12s;
+  }
+  .radio-item:hover { border-color: var(--primary-light); }
+  .radio-item .dot {
+    width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--gray-300); flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .radio-item .dot::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--primary); display: none; }
+  .radio-item.selected { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 700; }
+  .radio-item.selected .dot { border-color: #fff; }
+  .radio-item.selected .dot::after { display: block; background: #fff; }
+
+  /* 건물 요약 카드 */
+  .summary-card { background: var(--gray-50); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 13px; }
+  .summary-row { display: flex; justify-content: space-between; font-size: 12px; padding: 5px 0; }
+  .summary-row .slabel { color: var(--gray-500); }
+  .summary-row .sval { font-weight: 700; color: var(--primary); }
+  .summary-row .sval.warn { color: var(--warning); }
+
+  /* 층 선택 그리드 */
+  .floor-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+  .floor-item {
+    position: relative; min-width: 46px; padding: 9px 6px; text-align: center;
+    border: 1.5px solid var(--border); border-radius: var(--radius-sm); font-size: 12px; font-weight: 700;
+    color: var(--gray-700); cursor: pointer; transition: all .12s;
+  }
+  .floor-item:hover { border-color: var(--primary-light); }
+  .floor-item.selected { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .floor-item .fbadge {
+    position: absolute; top: -7px; right: -7px; min-width: 16px; height: 16px; padding: 0 4px;
+    border-radius: 9px; background: var(--warning); color: #fff; font-size: 10px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center; line-height: 1; border: 1.5px solid #fff;
+  }
+  .floor-item .fbadge.zero { background: var(--gray-300); }
+
+  /* 중복 신청 자동 감지 */
+  .conflict-panel { border-color: var(--danger-border); }
+  .conflict-list { display: flex; flex-direction: column; gap: 8px; }
+  .conflict-item {
+    display: flex; align-items: center; gap: 10px; padding: 11px 13px;
+    background: var(--danger-bg); border: 1px solid var(--danger-border); border-radius: var(--radius-sm); font-size: 12px; cursor: pointer;
+    transition: background .12s;
+  }
+  .conflict-item:hover { background: #F7DDDC; }
+  .conflict-item .ci-icon { color: var(--danger); font-size: 14px; flex-shrink: 0; }
+  .conflict-item .ci-room { font-weight: 700; color: var(--primary); width: 90px; flex-shrink: 0; }
+  .conflict-item .ci-detail { flex: 1; color: var(--gray-700); }
+  .conflict-item .ci-detail b { color: var(--danger); }
+
+  .btn-refresh {
+    margin-top: auto; width: 100%; height: 44px; border: none; border-radius: var(--radius-sm);
+    background: var(--success); color: #fff; font-size: 14px; font-weight: 700; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 8px; transition: background .12s;
+  }
+  .btn-refresh:hover { background: #0E6B4C; }
+  .btn-refresh .spin { display: inline-block; transition: transform .5s; }
+  .btn-refresh.spinning .spin { transform: rotate(360deg); }
+
+  /* 센터 패널 */
+  .timeline-head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 4px; }
+  .timeline-head h1 { font-size: 18px; margin: 0; color: var(--gray-900); font-weight: 700; }
+  .date-nav { display: flex; align-items: center; gap: 10px; }
+  #dateLabel { font-size: 18px; font-weight: 700; color: var(--gray-900); white-space: nowrap; letter-spacing: -0.2px; }
+  .date-arrow {
+    width: 28px; height: 28px; border-radius: var(--radius-sm); border: 1.5px solid var(--gray-200); background: #fff;
+    color: var(--primary); font-size: 13px; font-weight: 700; cursor: pointer; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; transition: all .12s;
+  }
+  .date-arrow:hover { border-color: var(--primary-light); background: var(--gray-50); }
+
+  .cal-box { position: relative; }
+  .header-actions { display: flex; align-items: center; gap: 8px; }
+  .btn-cal {
+    border: 1.5px solid var(--gray-200); background: #fff; color: var(--primary); font-weight: 700;
+    border-radius: var(--radius-sm); height: 34px; padding: 0 13px; font-size: 12px; cursor: pointer; transition: border-color .12s;
+  }
+  .btn-cal:hover { border-color: var(--primary-light); }
+  .mini-cal {
+    display: none; position: absolute; top: calc(100% + 8px); right: 0; width: 230px;
+    background: #fff; border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-md);
+    padding: 13px; z-index: 15;
+  }
+  .mini-cal.show { display: block; }
+  .mini-cal .mchead { display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 700; color: var(--primary); margin-bottom: 8px; }
+  .mini-cal .mgrid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; font-size: 11px; text-align: center; }
+  .mini-cal .mgrid .dow { color: var(--gray-300); font-weight: 700; padding-bottom: 4px; }
+  .mini-cal .mgrid .day { padding: 5px 0; border-radius: var(--radius-sm); cursor: pointer; color: var(--gray-700); }
+  .mini-cal .mgrid .day:hover { background: var(--gray-50); }
+  .mini-cal .mgrid .day.today { background: var(--primary); color: #fff; font-weight: 700; }
+  .mini-cal .mgrid .day.empty { visibility: hidden; }
+
+  .grid-hours {
+    display: grid; grid-template-columns: 90px repeat(9, 1fr);
+    font-size: 11px; color: var(--gray-500); margin: 14px 0 6px; text-align: left;
+  }
+  .grid-hours div { padding-left: 2px; }
+
+  .timeline-list { flex: 1; max-height: 560px; overflow-y: auto; padding-right: 4px; border-top: 1px solid var(--gray-100); }
+  .timeline-list::-webkit-scrollbar { width: 6px; }
+  .timeline-list::-webkit-scrollbar-thumb { background: var(--gray-300); border-radius: 4px; }
+
+  .grid-body {
+    display: grid; grid-template-columns: 90px 1fr; align-items: stretch;
+    min-height: 48px; padding: 0; border-bottom: 1px solid var(--gray-100);
+  }
+  .grid-body:nth-child(even) { background: var(--gray-50); }
+  .room-tag-cell { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
+  .room-tag { font-size: 12px; font-weight: 700; color: var(--gray-700); text-align: center; }
+  .room-edit-btn {
+    border: 1px solid var(--gray-200); background: #fff; color: var(--primary); font-size: 10px; font-weight: 700;
+    cursor: pointer; padding: 2px 8px; border-radius: 100px; flex-shrink: 0; white-space: nowrap; transition: all .12s;
+  }
+  .room-edit-btn:hover { background: #EFF4FA; border-color: var(--primary-light); }
+
+  /* 강의실 상태 배지 (최종관리자가 지정한 상태를 조회 전용으로 표시) */
+  .status-badge { display: inline-flex; align-items: center; gap: 3px; font-size: 9.5px; font-weight: 800; padding: 2px 7px; border-radius: 100px; white-space: nowrap; }
+  .status-badge.st-maintenance { background: var(--warning-bg); color: var(--warning); }
+  .status-badge.st-renovation { background: var(--info-bg); color: var(--info); }
+  .status-badge.st-closed { background: var(--danger-bg); color: var(--danger); }
+  .radio-item .status-badge { margin-left: auto; }
+  .grid-body.room-unavailable { background: repeating-linear-gradient(135deg, var(--gray-50), var(--gray-50) 10px, var(--gray-100) 10px, var(--gray-100) 20px); }
+  .grid-body.room-unavailable .track-wrap::after {
+    content: attr(data-unavailable-label); position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    font-size: 11.5px; font-weight: 700; color: var(--gray-500); background: rgba(248,249,251,0.75); pointer-events: none;
+  }
+  .status-warning-banner {
+    font-size: 12px; font-weight: 600; padding: 10px 12px; border-radius: var(--radius-sm); margin-bottom: 14px;
+    background: var(--warning-bg); color: var(--warning); display: none;
+  }
+  .status-warning-banner.show { display: block; }
+
+  .track-wrap { position: relative; height: 100%; }
+  .track {
+    position: relative; width: 100%; height: 100%;
+    background-image: linear-gradient(to right, var(--gray-100) 1px, transparent 1px);
+    background-size: calc(100% / 9) 100%;
+  }
+
+  /* ---------- 강의실 선택 시 월~금 주간 보기 ---------- */
+  .week-room-header {
+    display: flex; align-items: center; gap: 10px; padding: 10px 4px; border-bottom: 1px solid var(--border); margin-bottom: 4px;
+  }
+  .week-room-header .room-tag { font-size: 14px; }
+  .week-day-row {
+    display: grid; grid-template-columns: 40px 1fr; align-items: stretch;
+    min-height: 48px; padding: 0; border-bottom: 1px solid var(--gray-100);
+  }
+  .week-day-row:nth-child(even) { background: var(--gray-50); }
+  .week-day-label {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-size: 11.5px; font-weight: 700; color: var(--gray-700);
+  }
+  .week-day-label span { font-size: 9.5px; font-weight: 400; color: var(--gray-300); margin-top: 1px; }
+  .week-day-row.is-today .week-day-label { color: var(--primary); }
+  .week-day-row.is-today { background: var(--accent-bg, #FBEAEA); }
+  .week-day-row.room-unavailable { background: repeating-linear-gradient(135deg, var(--gray-50), var(--gray-50) 10px, var(--gray-100) 10px, var(--gray-100) 20px); }
+  .week-day-row.room-unavailable .track-wrap::after {
+    content: attr(data-unavailable-label); position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; color: var(--gray-500); background: rgba(248,249,251,0.75); pointer-events: none;
+  }
+
+  .seg {
+    position: absolute; top: 0; bottom: 0; border-radius: 0;
+    font-size: 11px; text-align: center; display: flex; align-items: center; justify-content: center;
+    padding: 2px 6px; overflow: hidden; white-space: nowrap; cursor: pointer;
+    transition: filter .12s, box-shadow .12s;
+  }
+  .seg:hover { filter: brightness(0.97); }
+  .seg.selected { box-shadow: 0 0 0 2px var(--primary) inset; font-weight: 700; }
+
+  .seg.status-approved { background: var(--gray-100); color: var(--gray-700); border: 1px solid var(--gray-200); }
+  .seg.status-confirmed { background: var(--info-bg); color: var(--info); border: 1px solid var(--info-border); font-weight: 600; }
+  .seg.status-pending { background: var(--warning-bg); color: var(--warning); border: 1px dashed var(--warning-border); font-weight: 600; }
+  .seg.status-rejected { background: var(--gray-100); color: #B04A4A; border: 1px dashed #D99; text-decoration: line-through; opacity: .7; }
+
+  #tooltip { margin-top: 14px; font-size: 12px; color: var(--gray-700); min-height: 18px; padding: 9px 12px; background: var(--gray-50); border-radius: var(--radius-sm); }
+  .legend { margin-top: 11px; font-size: 11px; color: var(--gray-500); display: flex; flex-wrap: wrap; gap: 14px; }
+  .legend .box { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 5px; vertical-align: -2px; }
+  .legend .b-approved { background: var(--gray-100); border: 1px solid var(--gray-200); }
+  .legend .b-confirmed { background: var(--info-bg); border: 1px solid var(--info-border); }
+  .legend .b-pending { background: var(--warning-bg); border: 1px dashed var(--warning-border); }
+  .legend .b-free { border: 1px dashed var(--gray-300); background: var(--gray-50); }
+
+  /* 우측 패널 */
+  .thumb {
+    width: 100%; aspect-ratio: 16/10; background: linear-gradient(135deg, var(--gray-100), var(--gray-50));
+    border-radius: var(--radius-md); margin-bottom: 12px; display: flex; align-items: center; justify-content: center;
+    color: var(--gray-300); font-size: 12px;
+  }
+  #roomTitleR { font-size: 16px; font-weight: 700; margin: 0 0 2px; color: var(--gray-900); }
+  #roomMetaR { font-size: 12px; color: var(--gray-500); margin: 0 0 6px; }
+  #roomInfoR { font-size: 11px; color: var(--gray-500); margin: 0 0 14px; line-height: 1.6; }
+
+  .resv-list { border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; margin-bottom: 18px; }
+  .resv-item {
+    display: flex; justify-content: space-between; align-items: center; gap: 8px;
+    padding: 11px 13px; font-size: 12px; border-bottom: 1px solid var(--gray-100); cursor: pointer; transition: background .1s;
+  }
+  .resv-item:last-child { border-bottom: none; }
+  .resv-item:hover { background: var(--gray-50); }
+  .resv-item.active { background: #EFF4FA; }
+  .resv-item .rtime { font-weight: 700; color: var(--gray-700); white-space: nowrap; }
+  .resv-item .rmid { flex: 1; margin: 0 8px; color: var(--gray-700); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .resv-item .rstatus { font-size: 10px; font-weight: 800; padding: 3px 8px; border-radius: 100px; white-space: nowrap; }
+  .rstatus.status-approved { background: var(--gray-100); color: var(--gray-700); }
+  .rstatus.status-confirmed { background: var(--info-bg); color: var(--info); }
+  .rstatus.status-pending { background: var(--warning-bg); color: var(--warning); }
+  .rstatus.status-rejected { background: var(--gray-100); color: #B04A4A; }
+
+  .detail-box { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 13px; margin-bottom: 14px; }
+  .detail-box .drow { display: flex; font-size: 12px; margin-bottom: 8px; }
+  .detail-box .drow:last-child { margin-bottom: 0; }
+  .detail-box .dlabel { width: 76px; flex-shrink: 0; color: var(--gray-500); font-weight: 600; }
+  .detail-box .dval { color: var(--gray-900); }
+
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 12px; font-weight: 700; margin-bottom: 7px; color: var(--gray-700); }
+  textarea#adminComment {
+    width: 100%; min-height: 68px; border: 1.5px solid var(--gray-200); border-radius: var(--radius-sm);
+    padding: 9px 11px; font-size: 12px; font-family: inherit; resize: vertical; background: var(--gray-50); transition: all .12s;
+  }
+  textarea#adminComment:focus { outline: none; border-color: var(--primary-light); background: #fff; }
+
+  .approve-row { display: flex; gap: 8px; }
+  .btn-approve, .btn-reject {
+    flex: 1; height: 42px; border: none; border-radius: var(--radius-sm); font-size: 13px; font-weight: 700; cursor: pointer; transition: all .12s;
+  }
+  .btn-approve { background: var(--success); color: #fff; }
+  .btn-approve:hover { background: #0E6B4C; }
+  .btn-reject { background: #fff; color: var(--danger); border: 1.5px solid var(--danger-border); }
+  .btn-reject:hover { background: var(--danger-bg); }
+  .btn-approve:disabled, .btn-reject:disabled { opacity: .4; cursor: not-allowed; }
+
+  .status-banner { font-size: 12px; padding: 9px 11px; border-radius: var(--radius-sm); margin-bottom: 14px; font-weight: 700; display: none; }
+  .status-banner.show { display: block; }
+  .status-banner.approved { background: var(--info-bg); color: var(--info); }
+  .status-banner.rejected { background: var(--gray-100); color: #B04A4A; }
+  .status-banner.locked { background: var(--warning-bg); color: var(--warning); }
+
+  .empty-hint { text-align: center; padding: 40px 10px; color: var(--gray-300); font-size: 13px; }
+
+  .bottom-wrap { padding: 0 22px 22px; }
+  .pending-list { display: flex; flex-direction: column; gap: 8px; }
+  .pending-row {
+    display: flex; align-items: center; gap: 14px; padding: 13px 15px;
+    border: 1px solid var(--warning-border); background: #FFFBEF; border-radius: var(--radius-md); font-size: 13px;
+  }
+  .pending-row .pr-room { font-weight: 700; color: var(--primary); width: 110px; flex-shrink: 0; }
+  .pending-row .pr-time { color: var(--gray-700); width: 110px; flex-shrink: 0; }
+  .pending-row .pr-sub { flex: 1; color: var(--gray-700); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pending-row .pr-applicant { color: var(--gray-500); width: 130px; flex-shrink: 0; }
+  .pending-row .pr-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .pending-row .pr-btn { border: none; border-radius: var(--radius-sm); font-size: 12px; font-weight: 700; padding: 7px 11px; cursor: pointer; transition: all .12s; }
+  .pending-row .pr-approve { background: var(--success); color: #fff; }
+  .pending-row .pr-approve:hover { background: #0E6B4C; }
+  .pending-row .pr-reject { background: #fff; color: var(--danger); border: 1.5px solid var(--danger-border); }
+  .pending-row .pr-reject:hover { background: var(--danger-bg); }
+
+  /* 모달 공통 */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(90,15,15,.5);
+    align-items: center; justify-content: center; z-index: 50;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal-box { background: #fff; border-radius: var(--radius-lg); padding: 24px; width: 340px; max-height: 88vh; overflow-y: auto; box-shadow: var(--shadow-lg); }
+  .modal-title { font-size: 15px; font-weight: 700; color: var(--gray-900); margin-bottom: 8px; }
+  .modal-desc { font-size: 12px; color: var(--gray-500); line-height: 1.6; margin-bottom: 18px; }
+  .modal-actions { display: flex; gap: 8px; }
+  .modal-btn-cancel, .modal-btn-confirm { flex: 1; height: 40px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 700; cursor: pointer; transition: background .12s; }
+  .modal-btn-cancel { background: #fff; border: 1.5px solid var(--gray-200); color: var(--gray-700); }
+  .modal-btn-cancel:hover { background: var(--gray-50); }
+  .modal-btn-confirm { background: var(--danger); border: none; color: #fff; }
+  .modal-btn-confirm:hover { background: #A5301F; }
+  .modal-btn-confirm.approve { background: var(--success); }
+  .modal-btn-confirm.approve:hover { background: #0E6B4C; }
+
+  /* 강의실 정보 수정 모달 */
+  .edit-field { margin-bottom: 13px; text-align: left; }
+  .edit-field label { display: block; font-size: 12px; font-weight: 700; color: var(--gray-700); margin-bottom: 6px; }
+  .edit-field input, .edit-field textarea, .edit-field select {
+    width: 100%; border: 1.5px solid var(--gray-200); border-radius: var(--radius-sm); padding: 9px 11px;
+    font-size: 12px; font-family: inherit; background: var(--gray-50); transition: all .12s;
+  }
+  .edit-field textarea { min-height: 56px; resize: vertical; }
+  .edit-field input:focus, .edit-field textarea:focus, .edit-field select:focus { outline: none; border-color: var(--primary-light); background: #fff; }
+
+  .semester-pick-list { display: flex; flex-direction: column; gap: 7px; max-height: 180px; overflow-y: auto; padding-right: 2px; }
+  .semester-pick-item {
+    display: flex; justify-content: space-between; align-items: center; gap: 8px;
+    padding: 9px 12px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); cursor: pointer; transition: all .12s;
+  }
+  .semester-pick-item:hover { border-color: var(--primary-light); background: var(--gray-50); }
+  .semester-pick-item.selected { background: #EFF4FA; border-color: var(--primary); }
+  .semester-pick-item .sp-name { font-size: 12.5px; font-weight: 700; color: var(--gray-900); }
+  .semester-pick-item .sp-dates { font-size: 10.5px; color: var(--gray-500); }
+  .semester-pick-empty { font-size: 11.5px; color: var(--gray-300); padding: 8px 0; }
+
+  .ac-slot-row {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--gray-50); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 8px 11px; font-size: 12px; margin-bottom: 6px;
+  }
+  .ac-slot-row .remove { border: none; background: none; color: var(--danger); cursor: pointer; font-size: 11px; font-weight: 700; }
+
+  .drag-ghost {
+    position: absolute; top: 0; bottom: 0; background: var(--success-bg);
+    border: 1.5px dashed var(--success-border); border-radius: 3px; pointer-events: none; z-index: 6;
+  }
+</style>
+</head>
+<body>
+
+<!-- ---------- 로그인 화면 ---------- -->
+<div id="loginScreen">
+  <div class="login-card">
+    <h1>강의실 예약 시스템 · 중간관리자 로그인</h1>
+    <p>담당 계정을 선택하면 본인이 관리하는 강의실만 표시됩니다.</p>
+    <div class="login-manager-list" id="loginManagerList"></div>
+  </div>
+</div>
+
+<!-- ---------- 메인 화면 ---------- -->
+<div id="appRoot">
+
+<header>
+  <div class="title">🏫 동서대학교 강의실 예약 <span class="badge">중간관리자</span></div>
+  <div class="menu">
+    <span class="manager-name" id="headerManagerName"></span>
+    <span>알림<span class="bell-dot"></span></span>
+    <span id="logoutBtn">로그아웃</span>
+  </div>
+</header>
+
+<div class="subbar">
+  <div class="subbar-crumb">중간관리자 &nbsp;›&nbsp; 내 담당 강의실</div>
+  <div class="subbar-actions">
+    <span class="subbar-badge" id="subbarPendingBadge">승인 대기 0건</span>
+    <button type="button" class="subbar-link" id="jumpToPendingBtn">승인 대기 목록 보기 ↓</button>
+  </div>
+</div>
+
+<div class="layout">
+
+  <!-- (A) 좌측 : 관리자 필터 & 제어 -->
+  <div class="panel">
+    <h2>내 담당 강의실</h2>
+    <p class="section-sub">담당 강의실만 표시됩니다. 클릭해서 필터링하세요.</p>
+
+    <div class="filter-block">
+      <div class="flabel">층 선택</div>
+      <div class="floor-grid" id="floorGrid"></div>
+    </div>
+
+    <div class="filter-block">
+      <div class="flabel">강의실 선택</div>
+      <div class="radio-group" id="myRoomGroup"></div>
+    </div>
+
+    <div class="filter-block">
+      <div class="flabel">담당 현황 요약</div>
+      <div class="summary-card">
+        <div class="summary-row"><span class="slabel">담당 강의실</span><span class="sval" id="sumRooms">-</span></div>
+        <div class="summary-row"><span class="slabel">오늘 예약 건수</span><span class="sval" id="sumTotal">-</span></div>
+        <div class="summary-row"><span class="slabel">승인 대기중</span><span class="sval warn" id="sumPending">-</span></div>
+      </div>
+    </div>
+
+    <button class="btn-refresh" id="ajaxBtn"><span class="spin">⟳</span> Ajax 갱신</button>
+  </div>
+
+  <!-- (B) 중앙 : 담당 강의실 타임라인 -->
+  <div class="panel">
+    <div class="timeline-head">
+      <div class="date-nav">
+        <button type="button" class="date-arrow" id="datePrevBtn">‹</button>
+        <span id="dateLabel">2026년 7월 14일 (화)</span>
+        <button type="button" class="date-arrow" id="dateNextBtn">›</button>
+        <h1 id="buildingLabel">· 내 강의실</h1>
+      </div>
+      <div class="header-actions">
+        <button type="button" class="btn-cal" id="addClassBtn">＋ 정기수업 등록</button>
+        <div class="cal-box">
+          <button class="btn-cal" id="calBtn">📅 달력보기</button>
+          <div class="mini-cal" id="miniCal">
+            <div class="mchead"><button id="mcPrev">‹</button><span id="mcLabel">2026년 7월</span><button id="mcNext">›</button></div>
+            <div class="mgrid" id="mcGrid"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-hours" id="hoursRow"></div>
+
+    <div class="timeline-list" id="timelineList"></div>
+
+    <div id="tooltip">회색/파랑/노랑 블록에 마우스를 올리면 상세 정보가 표시됩니다.</div>
+    <div class="legend">
+      <span><span class="box b-approved"></span>정기수업(예약불가)</span>
+      <span><span class="box b-confirmed"></span>확정 예약</span>
+      <span><span class="box b-pending"></span>대기중(승인필요)</span>
+      <span><span class="box b-free"></span>예약가능</span>
+    </div>
+  </div>
+
+  <!-- (C) 우측 : 신청 건 디테일 & 승인 -->
+  <div class="panel">
+    <h2>신청 건 디테일 &amp; 승인</h2>
+    <div class="thumb">강의실 사진</div>
+    <p id="roomTitleR">강의실을 선택해주세요</p>
+    <p id="roomMetaR">타임라인의 블록을 클릭하세요</p>
+    <p id="roomInfoR"></p>
+    <div class="status-warning-banner" id="statusWarningBanner"></div>
+    <button type="button" class="subbar-link" id="editRoomFromDetailBtn" style="display:none; margin-bottom:14px;">✎ 이 강의실 정보 수정</button>
+
+    <div class="resv-list" id="resvList">
+      <div class="empty-hint">타임라인에서 강의실 블록을 선택하면<br>해당 강의실의 예약 목록이 표시됩니다</div>
+    </div>
+
+    <div class="status-banner" id="statusBanner"></div>
+
+    <div class="field">
+      <label>신청 정보 확인</label>
+      <div class="detail-box" id="detailBox">
+        <div class="empty-hint" style="padding:20px 0;">왼쪽에서 예약 건을 선택하세요</div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>관리자 코멘트</label>
+      <textarea id="adminComment" placeholder="승인/거절 사유를 입력하세요"></textarea>
+    </div>
+
+    <div class="approve-row">
+      <button class="btn-approve" id="approveBtn" disabled>예약 승인</button>
+      <button class="btn-reject" id="rejectBtn" disabled>예약 거절</button>
+    </div>
+  </div>
+
+</div>
+
+<div class="bottom-wrap">
+  <div class="panel conflict-panel" id="conflictPanel" style="margin-bottom:16px;">
+    <h2>⚠ 중복 신청 자동 감지</h2>
+    <p class="section-sub">같은 강의실 · 겹치는 시간대에 대기중인 신청이 2건 이상이면 자동으로 표시됩니다</p>
+    <div class="conflict-list" id="conflictList"></div>
+  </div>
+
+  <div class="panel" id="pendingPanel">
+    <h2>승인 대기 목록</h2>
+    <p class="section-sub">내 담당 강의실 중 관리자 승인이 필요한 예약 건입니다</p>
+    <div class="pending-list" id="pendingListBottom"></div>
+  </div>
+</div>
+
+<!-- 승인 확인 모달 -->
+<div class="modal-overlay" id="approveModalOverlay">
+  <div class="modal-box">
+    <div class="modal-title">예약을 승인하시겠습니까?</div>
+    <div class="modal-desc">승인 처리 후에는 신청자에게 확정 예약으로 안내됩니다.</div>
+    <div class="modal-actions">
+      <button class="modal-btn-cancel" id="approveModalCancelBtn">취소</button>
+      <button class="modal-btn-confirm approve" id="approveModalConfirmBtn">승인</button>
+    </div>
+  </div>
+</div>
+
+<!-- 거절 확인 모달 -->
+<div class="modal-overlay" id="rejectModalOverlay">
+  <div class="modal-box">
+    <div class="modal-title">예약을 거절하시겠습니까?</div>
+    <div class="modal-desc">거절 처리 후에는 신청자에게 거절 상태로 안내됩니다. 관리자 코멘트에 거절 사유를 입력해두면 함께 전달됩니다.</div>
+    <div class="modal-actions">
+      <button class="modal-btn-cancel" id="modalCancelBtn">취소</button>
+      <button class="modal-btn-confirm" id="modalConfirmBtn">거절</button>
+    </div>
+  </div>
+</div>
+
+<!-- 강의실 정보 수정 모달 -->
+<div class="modal-overlay" id="editRoomModalOverlay">
+  <div class="modal-box">
+    <div class="modal-title">강의실 정보 수정</div>
+    <div class="edit-field">
+      <label>강의실명</label>
+      <input type="text" id="editRoomName">
+    </div>
+    <div class="edit-field">
+      <label>수용 인원</label>
+      <input type="text" id="editRoomCapacity">
+    </div>
+    <div class="edit-field">
+      <label>보유 장비</label>
+      <input type="text" id="editRoomEquip">
+    </div>
+    <div class="edit-field">
+      <label>위치 / 비고</label>
+      <textarea id="editRoomNote"></textarea>
+    </div>
+    <div class="edit-field">
+      <label>문의처 담당자</label>
+      <input type="text" id="editRoomContactDept" placeholder="예: UIT관 시설관리팀">
+    </div>
+    <div class="edit-field">
+      <label>문의처 전화</label>
+      <input type="text" id="editRoomContactPhone" placeholder="예: 051-320-1234">
+    </div>
+    <div class="edit-field">
+      <label>문의처 이메일</label>
+      <input type="text" id="editRoomContactEmail" placeholder="예: uit-facility@dongseo.ac.kr">
+    </div>
+    <div class="modal-actions">
+      <button class="modal-btn-cancel" id="editRoomCancelBtn">취소</button>
+      <button class="modal-btn-confirm approve" id="editRoomSaveBtn">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- 정기수업 등록 모달 -->
+<div class="modal-overlay" id="addClassModalOverlay">
+  <div class="modal-box">
+    <div class="modal-title">정기수업 등록</div>
+    <div class="modal-desc">등록한 시간대는 회색(정기수업)으로 표시되며, 승인/거절 대상에서 제외됩니다.</div>
+    <div class="edit-field">
+      <label>학기 선택</label>
+      <div class="semester-pick-list" id="acSemesterList"></div>
+    </div>
+    <div class="edit-field">
+      <label>강의실</label>
+      <select id="acRoom"></select>
+    </div>
+    <div class="edit-field">
+      <label>요일·시간 추가 (요일마다 다른 시간 가능)</label>
+      <div style="display:flex; gap:6px; margin-bottom:8px;">
+        <select id="acSlotDay" style="flex:1;"></select>
+        <select id="acSlotStart" style="flex:1;"></select>
+        <select id="acSlotEnd" style="flex:1;"></select>
+        <button type="button" id="acSlotAddBtn" class="subbar-link" style="flex-shrink:0;">추가</button>
+      </div>
+      <div id="acSlotList"></div>
+    </div>
+    <div class="edit-field">
+      <label>과목명</label>
+      <input type="text" id="acSubject" placeholder="예: 자료구조">
+    </div>
+    <div class="edit-field">
+      <label>담당 교수</label>
+      <input type="text" id="acProfessor" placeholder="예: 홍길동 교수">
+    </div>
+    <div class="edit-field">
+      <label>수강 인원</label>
+      <input type="text" id="acHeadcount" placeholder="예: 30명">
+    </div>
+    <div class="edit-field" id="acErrorBox" style="display:none; color:#C13A3A; font-size:12px; margin-top:-4px;"></div>
+    <div class="modal-actions">
+      <button class="modal-btn-cancel" id="addClassCancelBtn">취소</button>
+      <button class="modal-btn-confirm approve" id="addClassSaveBtn">등록</button>
+    </div>
+  </div>
+</div>
+
+</div><!-- /#appRoot -->
+
+<script>
+  /* ================= 기본 설정 ================= */
+  var TIME_START = 9;
+  var TIME_END = 18; // 09:00 ~ 18:00, 9시간
+  var DAYS_IN_MONTH = 31;
+  var JULY_1_DOW = 3; // 2026-07-01 은 수요일
+  var KOREAN_DOW = ["일", "월", "화", "수", "목", "금", "토"];
+
+  function dowOfDay(dayNum) {
+    return (JULY_1_DOW + (dayNum - 1)) % 7;
+  }
+  // 선택된 날짜가 속한 주의 월~금 5일 목록: [{dayNum, dow, label}]
+  function weekDaysForSelection() {
+    var dow = dowOfDay(state.selectedDay);
+    var mondayOffset = (dow === 0) ? -6 : (1 - dow);
+    var monday = state.selectedDay + mondayOffset;
+    var days = [];
+    for (var i = 0; i < 5; i++) {
+      var dayNum = monday + i;
+      days.push({ dayNum: dayNum, dow: dowOfDay(dayNum), label: KOREAN_DOW[dowOfDay(dayNum)] });
+    }
+    return days;
+  }
+
+  var FLOOR_COUNT = 6;
+  var ROOMS_PER_FLOOR = 3;
+  function makeFloors() {
+    var f = {};
+    for (var i = 1; i <= FLOOR_COUNT; i++) {
+      var arr = [];
+      for (var j = 1; j <= ROOMS_PER_FLOOR; j++) arr.push(i + "0" + j);
+      f[String(i)] = arr;
+    }
+    return f;
+  }
+
+  var BUILDINGS = {
+    "UIT 건물": { prefix: "UIT", floors: makeFloors() },
+    "전자정보관": { prefix: "전자정보관", floors: makeFloors() },
+    "뉴밀레니엄관": { prefix: "뉴밀레니엄관", floors: makeFloors() }
+  };
+
+  /* ---------- 관리자별 담당 강의실 (강의실마다 관리자가 다름) ---------- */
+  var MANAGERS = {
+    "sujeong": {
+      name: "이수정 관리자",
+      rooms: [
+        { b: "UIT 건물", r: "201" },
+        { b: "UIT 건물", r: "202" },
+        { b: "UIT 건물", r: "301" }
+      ]
+    },
+    "gwanho": {
+      name: "박관호 관리자",
+      rooms: [
+        { b: "UIT 건물", r: "401" },
+        { b: "UIT 건물", r: "402" },
+        { b: "전자정보관", r: "101" }
+      ]
+    },
+    "damdang": {
+      name: "김담당 관리자",
+      rooms: [
+        { b: "뉴밀레니엄관", r: "110" },
+        { b: "뉴밀레니엄관", r: "210" },
+        { b: "전자정보관", r: "301" }
+      ]
+    }
+  };
+
+  /* ---------- 강의실 상태 (최종관리자 화면에서 localStorage로 전달됨, 조회 전용) ---------- */
+  var STATUS_LABELS = {
+    available: "사용가능", maintenance: "공사중", renovation: "리모델링 예정", closed: "사용중지"
+  };
+  var ROOM_STATUS = {};
+  function loadRoomStatus() {
+    try {
+      var raw = localStorage.getItem("roomStatuses");
+      ROOM_STATUS = raw ? JSON.parse(raw) : {};
+    } catch (e) { ROOM_STATUS = {}; }
+  }
+  function getRoomStatus(b, r) { return ROOM_STATUS[roomKey(b, r)] || "available"; }
+  loadRoomStatus();
+
+  var PROFESSORS = ["이지현 교수", "김민수 교수", "박철수 교수", "최영희 교수"];
+  var CLUB_APPLICANTS = ["UIT 학회", "드론 연구회", "학생회", "캡스톤 동아리"];
+  var STUDENT_APPLICANTS = ["이수정 학생", "정하늘 학생", "김서연 학생"];
+
+  function roomKey(bName, room) { return bName + "_" + room; }
+
+  /* ---------- 강의실별 당일 예약 스케줄 (mock 데이터) ---------- */
+  var SCHEDULES = {};
+  SCHEDULES[roomKey("UIT 건물", "201")] = [
+    { start: 9, end: 11, status: "approved", sub: "AI 융합공학", applicant: "이지현 교수", purpose: "정규 강의", headcount: "32명", equip: "빔프로젝터, 전자교탁", note: "-" },
+    { start: 12, end: 14, status: "approved", sub: "데이터 사이언스", applicant: "김민수 교수", purpose: "정규 강의", headcount: "28명", equip: "빔프로젝터", note: "-" },
+    { start: 14, end: 15, status: "pending", sub: "조별 과제 - UIT 학회 미팅", applicant: "이수정 학생", purpose: "조별 과제 회의", headcount: "4명", equip: "VR 장비 요청", note: "조별 과제 특강 준비" },
+    { start: 15, end: 17, status: "confirmed", sub: "UIT 학회 정기모임", applicant: "UIT 학회", purpose: "동아리 정기 모임", headcount: "12명", equip: "화이트보드", note: "-" },
+    { start: 17, end: 18, status: "confirmed", sub: "드론 연구회 세미나", applicant: "드론 연구회", purpose: "학회 세미나", headcount: "9명", equip: "빔프로젝터", note: "-" }
+  ];
+  SCHEDULES[roomKey("UIT 건물", "202")] = [
+    { start: 9, end: 11, status: "approved", sub: "운영체제", applicant: "박철수 교수", purpose: "정규 강의", headcount: "35명", equip: "빔프로젝터", note: "-" },
+    { start: 16, end: 17, status: "pending", sub: "스터디 모임", applicant: "김서연 학생", purpose: "스터디", headcount: "6명", equip: "화이트보드", note: "-" },
+    { start: 17, end: 18, status: "pending", sub: "조별 과제 회의", applicant: "정하늘 학생", purpose: "조별 과제", headcount: "5명", equip: "-", note: "-" }
+  ];
+
+  /* ---------- 강의실 정보 (관리자가 수정 가능, localStorage로 index.html과 공유) ---------- */
+  var ROOM_INFO = {};
+  function defaultRoomInfo(bName, room) {
+    return {
+      name: roomLabel(bName, room), capacity: "30명", equip: "빔프로젝터, 화이트보드", note: "-",
+      contactDept: "", contactPhone: "", contactEmail: ""
+    };
+  }
+  function loadRoomInfo() {
+    try {
+      var raw = localStorage.getItem("roomContactInfo");
+      ROOM_INFO = raw ? JSON.parse(raw) : {};
+    } catch (e) { ROOM_INFO = {}; }
+  }
+  function saveRoomInfo() {
+    try { localStorage.setItem("roomContactInfo", JSON.stringify(ROOM_INFO)); } catch (e) {}
+  }
+  loadRoomInfo();
+  function getRoomInfo(bName, room) {
+    var key = roomKey(bName, room);
+    if (!ROOM_INFO[key]) ROOM_INFO[key] = defaultRoomInfo(bName, room);
+    return ROOM_INFO[key];
+  }
+
+  function hashSeed(str) {
+    var h = 0;
+    for (var i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
+    return h;
+  }
+  function seededRandom(seed) {
+    var x = Math.sin(seed) * 10000;
+    return x - Math.floor(x);
+  }
+
+  function generateMockSchedule(key) {
+    var blocks = [];
+    var t = TIME_START;
+    var seedBase = hashSeed(key);
+    var step = 0;
+    while (t < TIME_END) {
+      var r1 = seededRandom(seedBase + step * 7.13);
+      if (r1 > 0.55 && (TIME_END - t) >= 1) {
+        var r2 = seededRandom(seedBase + step * 3.7 + 1);
+        var dur = r2 > 0.7 ? 2 : 1;
+        dur = Math.min(dur, TIME_END - t);
+        var r3 = seededRandom(seedBase + step * 5.1 + 2);
+        var status, sub, applicant, purpose, headcount, equip;
+        if (r3 < 0.68) {
+          status = "approved";
+          applicant = PROFESSORS[Math.floor(seededRandom(seedBase + step) * PROFESSORS.length)];
+          sub = "정규 수업"; purpose = "정규 강의";
+          headcount = (20 + Math.floor(seededRandom(seedBase + step + 9) * 20)) + "명";
+          equip = "빔프로젝터";
+        } else if (r3 < 0.87) {
+          status = "confirmed";
+          applicant = CLUB_APPLICANTS[Math.floor(seededRandom(seedBase + step + 3) * CLUB_APPLICANTS.length)];
+          sub = "동아리/행사 예약"; purpose = "동아리 활동";
+          headcount = (6 + Math.floor(seededRandom(seedBase + step + 11) * 10)) + "명";
+          equip = "화이트보드";
+        } else {
+          status = "pending";
+          applicant = STUDENT_APPLICANTS[Math.floor(seededRandom(seedBase + step + 5) * STUDENT_APPLICANTS.length)];
+          sub = "학생 개인 신청"; purpose = "스터디/조별 과제";
+          headcount = (2 + Math.floor(seededRandom(seedBase + step + 13) * 6)) + "명";
+          equip = "-";
+        }
+        blocks.push({ start: t, end: t + dur, status: status, sub: sub, applicant: applicant, purpose: purpose, headcount: headcount, equip: equip, note: "-" });
+        t += dur;
+      } else {
+        t += 1;
+      }
+      step++;
+    }
+    return blocks;
+  }
+
+  function scheduleFor(bName, room) {
+    var key = roomKey(bName, room);
+    if (!SCHEDULES[key]) SCHEDULES[key] = generateMockSchedule(key);
+    return SCHEDULES[key];
+  }
+
+  function roomLabel(bName, room) {
+    var prefix = BUILDINGS[bName].prefix;
+    return prefix === "UIT" ? "UIT " + room : prefix + " " + room;
+  }
+  function displayRoomName(bName, room) {
+    var key = roomKey(bName, room);
+    return (ROOM_INFO[key] && ROOM_INFO[key].name) ? ROOM_INFO[key].name : roomLabel(bName, room);
+  }
+
+  /* ================= 상태 ================= */
+  var state = {
+    managerId: null,
+    myRooms: [],          // [{b, r}]
+    selectedFilterKey: "", // "" = 전체, 아니면 "b_r"
+    selectedFloor: "",     // "" = 전체 층, 아니면 층 숫자 문자열
+    selection: { b: null, r: null, idx: null },
+    selectedDay: 14
+  };
+
+  /* 강의실 번호의 첫 글자를 층으로 사용 (예: "201" -> 2층, "402" -> 4층) */
+  function floorOf(room) {
+    return room.charAt(0);
+  }
+
+  function formatSelectedDate() {
+    var dow = KOREAN_DOW[(JULY_1_DOW + (state.selectedDay - 1)) % 7];
+    return "2026년 7월 " + state.selectedDay + "일 (" + dow + ")";
+  }
+
+  /* ================= 로그인 ================= */
+  var loginScreen = document.getElementById("loginScreen");
+  var appRoot = document.getElementById("appRoot");
+
+  (function renderLoginList() {
+    var list = document.getElementById("loginManagerList");
+    list.innerHTML = Object.keys(MANAGERS).map(function (id) {
+      var m = MANAGERS[id];
+      var roomsText = m.rooms.map(function (rm) { return roomLabel(rm.b, rm.r); }).join(", ");
+      return '<button type="button" class="login-manager-btn" data-id="' + id + '">' +
+        '<div class="lm-name">' + m.name + '</div>' +
+        '<div class="lm-rooms">담당: ' + roomsText + '</div>' +
+        '</button>';
+    }).join("");
+    list.querySelectorAll(".login-manager-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        loginAs(btn.getAttribute("data-id"));
+      });
+    });
+  })();
+
+  /* 통합 로그인(login.html)에서 이미 계정을 선택하고 넘어온 경우 자동 로그인 */
+  (function tryAutoLoginFromSession() {
+    var savedId = sessionStorage.getItem("managerId");
+    if (savedId && MANAGERS[savedId]) loginAs(savedId);
+  })();
+
+  function loginAs(id) {
+    state.managerId = id;
+    state.myRooms = MANAGERS[id].rooms.slice();
+    state.selectedFilterKey = "";
+    state.selectedFloor = "";
+    document.getElementById("headerManagerName").textContent = MANAGERS[id].name + "님";
+    loginScreen.classList.add("hide");
+    appRoot.classList.add("show");
+    renderFloorGrid();
+    renderMyRoomGroup();
+    renderMiniCal();
+    renderAll();
+  }
+
+  document.getElementById("logoutBtn").addEventListener("click", function () {
+    sessionStorage.removeItem("managerId");
+    window.location.href = "login.html";
+  });
+
+  /* ================= 시간 헤더 ================= */
+  (function renderHours() {
+    var row = document.getElementById("hoursRow");
+    var html = "<div></div>";
+    for (var h = TIME_START; h < TIME_END; h++) html += "<div>" + (h < 10 ? "0" + h : h) + "</div>";
+    row.innerHTML = html;
+  })();
+
+  /* ================= 층 선택 ================= */
+  function renderFloorGrid() {
+    var grid = document.getElementById("floorGrid");
+    var byFloor = {};
+    state.myRooms.forEach(function (rm) {
+      var f = floorOf(rm.r);
+      if (!byFloor[f]) byFloor[f] = [];
+      byFloor[f].push(rm);
+    });
+    var floors = Object.keys(byFloor).sort();
+
+    var html = '<div class="floor-item' + (state.selectedFloor === "" ? " selected" : "") + '" data-floor="">전체</div>';
+    html += floors.map(function (f) {
+      var pending = 0;
+      byFloor[f].forEach(function (rm) {
+        scheduleFor(rm.b, rm.r).forEach(function (b) {
+          if (b.status === "pending" && isBlockVisibleToday(b)) pending++;
+        });
+      });
+      var badgeClass = "fbadge" + (pending === 0 ? " zero" : "");
+      return '<div class="floor-item' + (state.selectedFloor === f ? " selected" : "") + '" data-floor="' + f + '">' +
+        f + '층<span class="' + badgeClass + '">' + pending + '</span></div>';
+    }).join("");
+
+    grid.innerHTML = html;
+    grid.querySelectorAll(".floor-item").forEach(function (item) {
+      item.addEventListener("click", function () {
+        state.selectedFloor = item.getAttribute("data-floor");
+        state.selectedFilterKey = ""; // 층을 바꾸면 강의실 개별 필터는 초기화
+        renderFloorGrid();
+        renderMyRoomGroup();
+        renderTimelineAndPanels();
+      });
+    });
+  }
+
+  /* ================= 내 담당 강의실 목록 ================= */
+  function renderMyRoomGroup() {
+    var group = document.getElementById("myRoomGroup");
+    var roomsInFloor = state.myRooms.filter(function (rm) {
+      return !state.selectedFloor || floorOf(rm.r) === state.selectedFloor;
+    });
+    var html = '<div class="radio-item' + (state.selectedFilterKey === "" ? " selected" : "") + '" data-key=""><span class="dot"></span>전체 보기</div>';
+    html += roomsInFloor.map(function (rm) {
+      var key = roomKey(rm.b, rm.r);
+      var label = displayRoomName(rm.b, rm.r);
+      var status = getRoomStatus(rm.b, rm.r);
+      var badge = status !== "available" ? '<span class="status-badge st-' + status + '">' + STATUS_LABELS[status] + '</span>' : '';
+      return '<div class="radio-item' + (state.selectedFilterKey === key ? " selected" : "") + '" data-key="' + key + '"><span class="dot"></span>' + label + badge + '</div>';
+    }).join("");
+    group.innerHTML = html;
+    group.querySelectorAll(".radio-item").forEach(function (item) {
+      item.addEventListener("click", function () {
+        state.selectedFilterKey = item.getAttribute("data-key");
+        renderMyRoomGroup();
+        renderTimelineAndPanels();
+      });
+    });
+  }
+
+  function visibleRooms() {
+    var rooms = state.myRooms;
+    if (state.selectedFloor) {
+      rooms = rooms.filter(function (rm) { return floorOf(rm.r) === state.selectedFloor; });
+    }
+    if (!state.selectedFilterKey) return rooms;
+    return rooms.filter(function (rm) { return roomKey(rm.b, rm.r) === state.selectedFilterKey; });
+  }
+
+  /* ================= Ajax 갱신 ================= */
+  document.getElementById("ajaxBtn").addEventListener("click", function () {
+    var btn = this;
+    btn.classList.add("spinning");
+    btn.disabled = true;
+    var original = btn.innerHTML;
+    setTimeout(function () {
+      btn.classList.remove("spinning");
+      btn.disabled = false;
+      btn.innerHTML = '<span class="spin">✓</span> 갱신 완료';
+      loadRoomStatus();
+      renderAll();
+      setTimeout(function () { btn.innerHTML = original; }, 1200);
+    }, 500);
+  });
+
+  /* ================= 달력 보기 ================= */
+  var calBtn = document.getElementById("calBtn");
+  var miniCal = document.getElementById("miniCal");
+  calBtn.addEventListener("click", function () {
+    syncMiniCalHighlight();
+    miniCal.classList.toggle("show");
+  });
+  document.addEventListener("click", function (e) {
+    if (!e.target.closest(".cal-box")) miniCal.classList.remove("show");
+  });
+
+  function renderMiniCal() {
+    var grid = document.getElementById("mcGrid");
+    var html = KOREAN_DOW.map(function (d) { return '<div class="dow">' + d + '</div>'; }).join("");
+    for (var i = 0; i < JULY_1_DOW; i++) html += '<div class="day empty"></div>';
+    for (var d = 1; d <= DAYS_IN_MONTH; d++) {
+      html += '<div class="day' + (d === state.selectedDay ? " today" : "") + '" data-day="' + d + '">' + d + '</div>';
+    }
+    grid.innerHTML = html;
+    grid.querySelectorAll(".day[data-day]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        state.selectedDay = parseInt(el.getAttribute("data-day"), 10);
+        syncMiniCalHighlight();
+        renderTimelineAndPanels();
+        miniCal.classList.remove("show");
+      });
+    });
+  }
+  function syncMiniCalHighlight() {
+    document.querySelectorAll("#mcGrid .day").forEach(function (el) {
+      var d = el.getAttribute("data-day");
+      el.classList.toggle("today", d !== null && parseInt(d, 10) === state.selectedDay);
+    });
+  }
+
+  document.getElementById("datePrevBtn").addEventListener("click", function () {
+    if (state.selectedDay > 1) { state.selectedDay -= 1; syncMiniCalHighlight(); renderTimelineAndPanels(); }
+  });
+  document.getElementById("dateNextBtn").addEventListener("click", function () {
+    if (state.selectedDay < DAYS_IN_MONTH) { state.selectedDay += 1; syncMiniCalHighlight(); renderTimelineAndPanels(); }
+  });
+
+  /* ================= 유틸 ================= */
+  function timeLabel(h) {
+    var hh = Math.floor(h);
+    var mm = Math.round((h - hh) * 60);
+    return (hh < 10 ? "0" : "") + hh + ":" + (mm === 0 ? "00" : mm);
+  }
+  function segStyle(b) {
+    var left = ((b.start - TIME_START) / (TIME_END - TIME_START)) * 100;
+    var width = ((b.end - b.start) / (TIME_END - TIME_START)) * 100;
+    return "left:" + left + "%; width:" + width + "%;";
+  }
+  function statusLabel(s) {
+    return s === "approved" ? "정기수업" : s === "pending" ? "대기중" : s === "confirmed" ? "확정예약" : "거절됨";
+  }
+
+  var weekViewRoom = null; // 강의실 하나를 선택해 주간 보기를 렌더링 중일 때 해당 강의실 {b, r}
+
+  /* ================= 타임라인 렌더링 ================= */
+  function renderTimeline() {
+    var container = document.getElementById("timelineList");
+    var rooms = visibleRooms();
+
+    if (!rooms.length) {
+      container.innerHTML = '<div class="empty-hint">담당 강의실이 없습니다</div>';
+      return;
+    }
+
+    // 강의실을 하나 선택한 경우: 해당 강의실의 월~금 전체를 보여줌
+    if (state.selectedFilterKey && rooms.length === 1) {
+      renderRoomWeekView(container, rooms[0]);
+      return;
+    }
+
+    // 전체 보기: 담당 강의실 전체의 당일(선택한 날짜) 일정만 보여줌
+    weekViewRoom = null;
+    container.innerHTML = rooms.map(function (rm) {
+      var blocks = scheduleFor(rm.b, rm.r);
+      var status = getRoomStatus(rm.b, rm.r);
+      var segsHtml = blocks.map(function (b, idx) {
+        if (!isBlockVisibleToday(b)) return "";
+        var sel = (state.selection.b === rm.b && state.selection.r === rm.r && state.selection.idx === idx) ? " selected" : "";
+        return '<div class="seg status-' + b.status + sel + '" style="' + segStyle(b) + '" ' +
+          'data-b="' + rm.b + '" data-r="' + rm.r + '" data-idx="' + idx + '" ' +
+          'data-info="' + displayRoomName(rm.b, rm.r) + ' · ' + timeLabel(b.start) + '-' + timeLabel(b.end) + ' · ' + b.applicant + ' · ' + b.sub + '">' +
+          b.applicant + '</div>';
+      }).join("");
+      return '<div class="grid-body' + (status !== "available" ? " room-unavailable" : "") + '">' +
+        '<div class="room-tag-cell">' +
+        '<span class="room-tag">' + displayRoomName(rm.b, rm.r) + '</span>' +
+        (status !== "available" ? '<span class="status-badge st-' + status + '">' + STATUS_LABELS[status] + '</span>' : '') +
+        '<button type="button" class="room-edit-btn" data-b="' + rm.b + '" data-r="' + rm.r + '" title="강의실 정보 수정">✎ 수정</button>' +
+        '</div>' +
+        '<div class="track-wrap"' + (status !== "available" ? ' data-unavailable-label="🚧 ' + STATUS_LABELS[status] + '으로 예약을 받지 않아요"' : '') + '><div class="track">' + segsHtml + '</div></div>' +
+        '</div>';
+    }).join("");
+  }
+
+  // 강의실 하나를 선택했을 때: 월~금 5일치를 한 번에 보여줌
+  function renderRoomWeekView(container, rm) {
+    var blocks = scheduleFor(rm.b, rm.r);
+    var status = getRoomStatus(rm.b, rm.r);
+    var week = weekDaysForSelection();
+    var todayStr = state.selectedDay;
+
+    var header = '<div class="week-room-header">' +
+      '<span class="room-tag">' + displayRoomName(rm.b, rm.r) + '</span>' +
+      (status !== "available" ? '<span class="status-badge st-' + status + '">' + STATUS_LABELS[status] + '</span>' : '') +
+      '<button type="button" class="room-edit-btn" data-b="' + rm.b + '" data-r="' + rm.r + '" title="강의실 정보 수정">✎ 수정</button>' +
+      '</div>';
+
+    var rowsHtml = week.map(function (d) {
+      var segsHtml = blocks.map(function (b, idx) {
+        if (!isBlockVisibleOnDow(b, d.dow)) return "";
+        var sel = (state.selection.b === rm.b && state.selection.r === rm.r && state.selection.idx === idx) ? " selected" : "";
+        return '<div class="seg status-' + b.status + sel + '" style="' + segStyle(b) + '" ' +
+          'data-b="' + rm.b + '" data-r="' + rm.r + '" data-idx="' + idx + '" ' +
+          'data-info="' + displayRoomName(rm.b, rm.r) + ' · ' + d.label + '요일 ' + timeLabel(b.start) + '-' + timeLabel(b.end) + ' · ' + b.applicant + ' · ' + b.sub + '">' +
+          b.applicant + '</div>';
+      }).join("");
+      var isToday = d.dayNum === todayStr;
+      var rowClass = "week-day-row" + (isToday ? " is-today" : "") + (status !== "available" ? " room-unavailable" : "");
+      return '<div class="' + rowClass + '">' +
+        '<div class="week-day-label">' + d.label + '<span>' + d.dayNum + '일</span></div>' +
+        '<div class="track-wrap"' + (status !== "available" ? ' data-unavailable-label="🚧 ' + STATUS_LABELS[status] + '으로 예약을 받지 않아요"' : '') +
+        '><div class="track" data-dow="' + d.dow + '">' + segsHtml + '</div></div>' +
+        '</div>';
+    }).join("");
+
+    container.innerHTML = header + rowsHtml;
+    weekViewRoom = { b: rm.b, r: rm.r };
+  }
+
+  var timelineList = document.getElementById("timelineList");
+  timelineList.addEventListener("click", function (e) {
+    var editBtn = e.target.closest(".room-edit-btn");
+    if (editBtn) {
+      openEditRoomModal(editBtn.getAttribute("data-b"), editBtn.getAttribute("data-r"));
+      return;
+    }
+    var seg = e.target.closest(".seg");
+    if (!seg) return;
+    selectReservation(seg.getAttribute("data-b"), seg.getAttribute("data-r"), parseInt(seg.getAttribute("data-idx"), 10));
+  });
+  timelineList.addEventListener("mouseover", function (e) {
+    var seg = e.target.closest(".seg");
+    if (!seg) return;
+    document.getElementById("tooltip").textContent = seg.getAttribute("data-info");
+  });
+  timelineList.addEventListener("mouseout", function (e) {
+    if (!e.target.closest(".seg")) return;
+    document.getElementById("tooltip").textContent = "회색/파랑/노랑 블록에 마우스를 올리면 상세 정보가 표시됩니다.";
+  });
+
+  /* ================= 우측 예약 목록 ================= */
+  function renderResvList() {
+    var list = document.getElementById("resvList");
+    if (!state.selection.b) {
+      list.innerHTML = '<div class="empty-hint">타임라인에서 강의실 블록을 선택하면<br>해당 강의실의 예약 목록이 표시됩니다</div>';
+      return;
+    }
+    var blocks = scheduleFor(state.selection.b, state.selection.r);
+    list.innerHTML = blocks.map(function (b, idx) {
+      if (!isBlockVisibleToday(b)) return "";
+      var active = (state.selection.idx === idx) ? " active" : "";
+      return '<div class="resv-item' + active + '" data-idx="' + idx + '">' +
+        '<span class="rtime">' + timeLabel(b.start) + '~' + timeLabel(b.end) + '</span>' +
+        '<span class="rmid">' + b.sub + '</span>' +
+        '<span class="rstatus status-' + b.status + '">' + statusLabel(b.status) + '</span>' +
+        '</div>';
+    }).join("");
+    list.querySelectorAll(".resv-item").forEach(function (el) {
+      el.addEventListener("click", function () {
+        selectReservation(state.selection.b, state.selection.r, parseInt(el.getAttribute("data-idx"), 10));
+      });
+    });
+  }
+
+  /* ================= 예약 건 선택 ================= */
+  function selectReservation(bName, room, idx) {
+    state.selection = { b: bName, r: room, idx: idx };
+    var b = scheduleFor(bName, room)[idx];
+    var info = getRoomInfo(bName, room);
+    var label = displayRoomName(bName, room);
+
+    document.getElementById("roomTitleR").textContent = label + " 예약 정보";
+    document.getElementById("roomMetaR").textContent = "예약 정보 목록 (" + formatSelectedDate() + ")";
+    var contactText = (info.contactPhone || info.contactEmail)
+      ? " · 문의처 " + [info.contactDept, info.contactPhone, info.contactEmail].filter(Boolean).join(" / ")
+      : "";
+    document.getElementById("roomInfoR").textContent = "수용인원 " + info.capacity + " · 보유장비 " + info.equip + contactText;
+    document.getElementById("editRoomFromDetailBtn").style.display = "inline-block";
+
+    var roomStatus = getRoomStatus(bName, room);
+    var warnBanner = document.getElementById("statusWarningBanner");
+    if (roomStatus !== "available") {
+      warnBanner.className = "status-warning-banner show";
+      warnBanner.textContent = "🚧 이 강의실은 최종관리자가 \"" + STATUS_LABELS[roomStatus] + "\" 상태로 지정했어요. 승인 전에 확인해주세요.";
+    } else {
+      warnBanner.className = "status-warning-banner";
+      warnBanner.textContent = "";
+    }
+
+    document.getElementById("detailBox").innerHTML =
+      '<div class="drow"><div class="dlabel">신청자</div><div class="dval">' + b.applicant + '</div></div>' +
+      '<div class="drow"><div class="dlabel">대여목적</div><div class="dval">' + b.purpose + '</div></div>' +
+      '<div class="drow"><div class="dlabel">이용시간</div><div class="dval">' + timeLabel(b.start) + ' ~ ' + timeLabel(b.end) + '</div></div>' +
+      '<div class="drow"><div class="dlabel">이용인원</div><div class="dval">' + b.headcount + '</div></div>' +
+      '<div class="drow"><div class="dlabel">장비 요청</div><div class="dval">' + b.equip + '</div></div>' +
+      '<div class="drow"><div class="dlabel">특이사항</div><div class="dval">' + b.note + '</div></div>';
+
+    document.getElementById("adminComment").value = b.comment || "";
+
+    var banner = document.getElementById("statusBanner");
+    var approveBtn = document.getElementById("approveBtn");
+    var rejectBtn = document.getElementById("rejectBtn");
+
+    if (b.status === "pending") {
+      banner.className = "status-banner show locked";
+      banner.textContent = "관리자 승인이 필요한 예약 건입니다.";
+      approveBtn.disabled = false; rejectBtn.disabled = false;
+    } else if (b.status === "approved") {
+      banner.className = "status-banner show approved";
+      banner.textContent = "정규 수업(고정 일정)으로, 승인/거절 대상이 아닙니다.";
+      approveBtn.disabled = true; rejectBtn.disabled = true;
+    } else if (b.status === "confirmed") {
+      banner.className = "status-banner show approved";
+      banner.textContent = "이미 승인 완료된 예약입니다.";
+      approveBtn.disabled = true; rejectBtn.disabled = false;
+    } else {
+      banner.className = "status-banner show rejected";
+      banner.textContent = "거절 처리된 예약입니다.";
+      approveBtn.disabled = false; rejectBtn.disabled = true;
+    }
+
+    renderTimeline();
+    renderResvList();
+    renderSummary();
+  }
+
+  /* ================= 승인 / 거절 ================= */
+  document.getElementById("approveBtn").addEventListener("click", openApproveModal);
+  document.getElementById("rejectBtn").addEventListener("click", openRejectModal);
+
+  function handleDecision(newStatus) {
+    if (!state.selection.b || state.selection.idx === null) return;
+    var blocks = scheduleFor(state.selection.b, state.selection.r);
+    var b = blocks[state.selection.idx];
+    if (b.status === "approved") return; // 정규 수업은 변경 불가
+    b.status = newStatus === "approved" ? "confirmed" : "rejected";
+    b.comment = document.getElementById("adminComment").value;
+    selectReservation(state.selection.b, state.selection.r, state.selection.idx);
+  }
+
+  var approveModalOverlay = document.getElementById("approveModalOverlay");
+  function openApproveModal() {
+    if (!state.selection.b || state.selection.idx === null) return;
+    approveModalOverlay.classList.add("show");
+  }
+  function closeApproveModal() { approveModalOverlay.classList.remove("show"); }
+  document.getElementById("approveModalCancelBtn").addEventListener("click", closeApproveModal);
+  approveModalOverlay.addEventListener("click", function (e) { if (e.target === approveModalOverlay) closeApproveModal(); });
+  document.getElementById("approveModalConfirmBtn").addEventListener("click", function () { handleDecision("approved"); closeApproveModal(); });
+
+  var rejectModalOverlay = document.getElementById("rejectModalOverlay");
+  function openRejectModal() {
+    if (!state.selection.b || state.selection.idx === null) return;
+    rejectModalOverlay.classList.add("show");
+  }
+  function closeRejectModal() { rejectModalOverlay.classList.remove("show"); }
+  document.getElementById("modalCancelBtn").addEventListener("click", closeRejectModal);
+  rejectModalOverlay.addEventListener("click", function (e) { if (e.target === rejectModalOverlay) closeRejectModal(); });
+  document.getElementById("modalConfirmBtn").addEventListener("click", function () { handleDecision("rejected"); closeRejectModal(); });
+
+  /* ================= 강의실 정보 수정 ================= */
+  var editRoomModalOverlay = document.getElementById("editRoomModalOverlay");
+  var editingRoom = { b: null, r: null };
+
+  function openEditRoomModal(bName, room) {
+    editingRoom = { b: bName, r: room };
+    var info = getRoomInfo(bName, room);
+    document.getElementById("editRoomName").value = info.name;
+    document.getElementById("editRoomCapacity").value = info.capacity;
+    document.getElementById("editRoomEquip").value = info.equip;
+    document.getElementById("editRoomNote").value = info.note;
+    document.getElementById("editRoomContactDept").value = info.contactDept || "";
+    document.getElementById("editRoomContactPhone").value = info.contactPhone || "";
+    document.getElementById("editRoomContactEmail").value = info.contactEmail || "";
+    editRoomModalOverlay.classList.add("show");
+  }
+  function closeEditRoomModal() { editRoomModalOverlay.classList.remove("show"); }
+  document.getElementById("editRoomCancelBtn").addEventListener("click", closeEditRoomModal);
+  editRoomModalOverlay.addEventListener("click", function (e) { if (e.target === editRoomModalOverlay) closeEditRoomModal(); });
+  document.getElementById("editRoomSaveBtn").addEventListener("click", function () {
+    if (!editingRoom.b) return;
+    var key = roomKey(editingRoom.b, editingRoom.r);
+    ROOM_INFO[key] = {
+      name: document.getElementById("editRoomName").value.trim() || roomLabel(editingRoom.b, editingRoom.r),
+      capacity: document.getElementById("editRoomCapacity").value.trim() || "-",
+      equip: document.getElementById("editRoomEquip").value.trim() || "-",
+      note: document.getElementById("editRoomNote").value.trim() || "-",
+      contactDept: document.getElementById("editRoomContactDept").value.trim(),
+      contactPhone: document.getElementById("editRoomContactPhone").value.trim(),
+      contactEmail: document.getElementById("editRoomContactEmail").value.trim()
+    };
+    saveRoomInfo();
+    closeEditRoomModal();
+    renderMyRoomGroup();
+    renderTimelineAndPanels();
+    if (state.selection.b === editingRoom.b && state.selection.r === editingRoom.r && state.selection.idx !== null) {
+      selectReservation(state.selection.b, state.selection.r, state.selection.idx);
+    }
+  });
+
+  document.getElementById("editRoomFromDetailBtn").addEventListener("click", function () {
+    if (!state.selection.b) return;
+    openEditRoomModal(state.selection.b, state.selection.r);
+  });
+
+  /* ---------- 학기 목록 (최종관리자 화면에서 localStorage로 전달됨, 모든 관리자에게 동일, 조회 전용) ---------- */
+  var SEMESTERS = [];
+  function loadSemesters() {
+    try {
+      var raw = localStorage.getItem("academicSemesters");
+      SEMESTERS = raw ? JSON.parse(raw) : [];
+    } catch (e) { SEMESTERS = []; }
+  }
+  loadSemesters();
+
+  var selectedSemesterId = null;
+
+  function renderAcSemesterList() {
+    var box = document.getElementById("acSemesterList");
+    if (!SEMESTERS.length) {
+      box.innerHTML = '<div class="semester-pick-empty">최종관리자가 등록한 학기가 없어요.</div>';
+      return;
+    }
+    box.innerHTML = SEMESTERS.map(function (s) {
+      return '<div class="semester-pick-item' + (selectedSemesterId === s.id ? " selected" : "") + '" data-id="' + s.id + '">' +
+        '<span class="sp-name">' + s.name + '</span>' +
+        '<span class="sp-dates">' + s.startDate + ' ~ ' + s.endDate + '</span>' +
+        '</div>';
+    }).join("");
+    box.querySelectorAll(".semester-pick-item").forEach(function (item) {
+      item.addEventListener("click", function () {
+        selectedSemesterId = item.getAttribute("data-id");
+        renderAcSemesterList();
+      });
+    });
+  }
+
+  /* ================= 정기수업 등록 (중간관리자가 직접 입력) ================= */
+  var addClassModalOverlay = document.getElementById("addClassModalOverlay");
+  var DOW_NAMES = ["일", "월", "화", "수", "목", "금", "토"];
+  var acSlots = []; // [{day, start, end}] - 요일마다 다른 시간을 가질 수 있음
+
+  function currentDow() {
+    return (JULY_1_DOW + (state.selectedDay - 1)) % 7;
+  }
+  function isBlockVisibleToday(b) {
+    return !b.days || b.days.indexOf(currentDow()) !== -1;
+  }
+  function isBlockVisibleOnDow(b, dow) {
+    return !b.days || b.days.indexOf(dow) !== -1;
+  }
+
+  function hourOptions(selectEl, includeEnd) {
+    var html = "";
+    var last = includeEnd ? TIME_END : TIME_END - 1;
+    for (var h = TIME_START; h <= last; h++) {
+      html += '<option value="' + h + '">' + (h < 10 ? "0" + h : h) + ":00</option>";
+    }
+    selectEl.innerHTML = html;
+  }
+
+  function renderAcSlotList() {
+    var box = document.getElementById("acSlotList");
+    if (!acSlots.length) {
+      box.innerHTML = '<div class="empty-hint" style="padding:8px 0;">추가된 요일·시간이 없습니다. 위에서 요일과 시간을 골라 "추가"를 눌러주세요.</div>';
+      return;
+    }
+    box.innerHTML = acSlots.map(function (s, idx) {
+      var startTxt = (s.start < 10 ? "0" + s.start : s.start) + ":00";
+      var endTxt = (s.end < 10 ? "0" + s.end : s.end) + ":00";
+      return '<div class="ac-slot-row"><span>' + DOW_NAMES[s.day] + '요일 ' + startTxt + ' ~ ' + endTxt + '</span>' +
+        '<button type="button" class="remove" data-idx="' + idx + '">삭제</button></div>';
+    }).join("");
+    box.querySelectorAll(".remove").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        acSlots.splice(parseInt(btn.getAttribute("data-idx"), 10), 1);
+        renderAcSlotList();
+      });
+    });
+  }
+
+  document.getElementById("acSlotAddBtn").addEventListener("click", function () {
+    var day = parseInt(document.getElementById("acSlotDay").value, 10);
+    var start = parseFloat(document.getElementById("acSlotStart").value);
+    var end = parseFloat(document.getElementById("acSlotEnd").value);
+    hideAddClassError();
+    if (end <= start) { showAddClassError("종료 시간은 시작 시간보다 늦어야 합니다."); return; }
+    var dup = acSlots.some(function (s) { return s.day === day && start < s.end && end > s.start; });
+    if (dup) { showAddClassError("이미 같은 요일에 겹치는 시간이 추가되어 있습니다."); return; }
+    acSlots.push({ day: day, start: start, end: end });
+    renderAcSlotList();
+  });
+
+  /* preset: { b, r, start, end } - 타임라인 드래그로 등록을 시작한 경우 전달됨 */
+  function openAddClassModal(preset) {
+    if (!state.myRooms.length) return;
+    loadSemesters();
+    selectedSemesterId = SEMESTERS.length ? SEMESTERS[0].id : null;
+    renderAcSemesterList();
+
+    var roomSel = document.getElementById("acRoom");
+    roomSel.innerHTML = state.myRooms.map(function (rm) {
+      var key = roomKey(rm.b, rm.r);
+      return '<option value="' + key + '">' + displayRoomName(rm.b, rm.r) + '</option>';
+    }).join("");
+
+    var daySel = document.getElementById("acSlotDay");
+    daySel.innerHTML = DOW_NAMES.map(function (n, i) { return '<option value="' + i + '">' + n + '요일</option>'; }).join("");
+    var startSel = document.getElementById("acSlotStart");
+    var endSel = document.getElementById("acSlotEnd");
+    hourOptions(startSel, false);
+    hourOptions(endSel, true);
+
+    if (preset) {
+      roomSel.value = roomKey(preset.b, preset.r);
+      var presetDay = (preset.day !== null && preset.day !== undefined) ? preset.day : currentDow();
+      acSlots = [{ day: presetDay, start: preset.start, end: preset.end }];
+    } else {
+      if (state.selectedFilterKey) roomSel.value = state.selectedFilterKey;
+      daySel.value = currentDow();
+      acSlots = [];
+    }
+    renderAcSlotList();
+
+    document.getElementById("acSubject").value = "";
+    document.getElementById("acProfessor").value = "";
+    document.getElementById("acHeadcount").value = "";
+    hideAddClassError();
+
+    addClassModalOverlay.classList.add("show");
+  }
+  function closeAddClassModal() { addClassModalOverlay.classList.remove("show"); }
+  function showAddClassError(msg) {
+    var box = document.getElementById("acErrorBox");
+    box.textContent = msg;
+    box.style.display = "block";
+  }
+  function hideAddClassError() {
+    document.getElementById("acErrorBox").style.display = "none";
+  }
+
+  document.getElementById("addClassBtn").addEventListener("click", function () { openAddClassModal(null); });
+  document.getElementById("addClassCancelBtn").addEventListener("click", closeAddClassModal);
+  addClassModalOverlay.addEventListener("click", function (e) { if (e.target === addClassModalOverlay) closeAddClassModal(); });
+
+  document.getElementById("addClassSaveBtn").addEventListener("click", function () {
+    if (!selectedSemesterId) { showAddClassError("학기를 선택해주세요."); return; }
+    var semester = SEMESTERS.filter(function (s) { return s.id === selectedSemesterId; })[0];
+
+    var roomSel = document.getElementById("acRoom");
+    var key = roomSel.value;
+    var rm = state.myRooms.filter(function (r) { return roomKey(r.b, r.r) === key; })[0];
+    if (!rm) { showAddClassError("강의실을 선택해주세요."); return; }
+
+    var subject = document.getElementById("acSubject").value.trim();
+    var professor = document.getElementById("acProfessor").value.trim();
+    var headcount = document.getElementById("acHeadcount").value.trim();
+
+    if (!acSlots.length) { showAddClassError("요일별 시간을 최소 1개 이상 추가해주세요."); return; }
+    if (!subject) { showAddClassError("과목명을 입력해주세요."); return; }
+    if (!professor) { showAddClassError("담당 교수를 입력해주세요."); return; }
+
+    var blocks = scheduleFor(rm.b, rm.r);
+
+    // 저장 전에 모든 슬롯의 충돌 여부를 먼저 검사 (하나라도 겹치면 전체 등록 취소)
+    for (var i = 0; i < acSlots.length; i++) {
+      var s = acSlots[i];
+      var overlap = blocks.some(function (b) {
+        var timeOverlap = s.start < b.end && s.end > b.start;
+        if (!timeOverlap) return false;
+        if (!b.days) return true; // 매일 표시되는 기존 일정과는 항상 충돌
+        return b.days.indexOf(s.day) !== -1;
+      });
+      if (overlap) {
+        showAddClassError(DOW_NAMES[s.day] + "요일 " + timeLabel(s.start) + "~" + timeLabel(s.end) + " 시간대에 이미 다른 예약이 있습니다.");
+        return;
+      }
+    }
+
+    acSlots.forEach(function (s) {
+      blocks.push({
+        start: s.start, end: s.end, status: "approved", days: [s.day],
+        sub: subject, applicant: professor, purpose: "정규 강의",
+        headcount: headcount || "-", equip: "빔프로젝터", note: "-",
+        semester: semester ? semester.name : "-"
+      });
+    });
+
+    closeAddClassModal();
+    renderTimelineAndPanels();
+  });
+
+  /* ---------- 타임라인에서 드래그로 시간대 선택 → 정기수업 등록 ---------- */
+  var dragState = null;
+
+  function pixelToHour(clientX, rect) {
+    var ratio = (clientX - rect.left) / rect.width;
+    ratio = Math.max(0, Math.min(1, ratio));
+    return Math.round(TIME_START + ratio * (TIME_END - TIME_START));
+  }
+  function updateGhost(h1, h2) {
+    var s = Math.min(h1, h2), e = Math.max(h1, h2);
+    var left = ((s - TIME_START) / (TIME_END - TIME_START)) * 100;
+    var width = ((e - s) / (TIME_END - TIME_START)) * 100;
+    dragState.ghost.style.left = left + "%";
+    dragState.ghost.style.width = width + "%";
+  }
+
+  timelineList.addEventListener("mousedown", function (e) {
+    if (e.target.closest(".seg") || e.target.closest(".room-edit-btn")) return;
+    var track = e.target.closest(".track");
+    if (!track) return;
+    var dowAttr = track.getAttribute("data-dow");
+    var bName, room, day;
+    if (dowAttr !== null) {
+      if (!weekViewRoom) return;
+      bName = weekViewRoom.b;
+      room = weekViewRoom.r;
+      day = parseInt(dowAttr, 10);
+    } else {
+      var gridBody = track.closest(".grid-body");
+      var editBtn = gridBody.querySelector(".room-edit-btn");
+      if (!editBtn) return;
+      bName = editBtn.getAttribute("data-b");
+      room = editBtn.getAttribute("data-r");
+      day = null;
+    }
+    var rect = track.getBoundingClientRect();
+    var startHour = pixelToHour(e.clientX, rect);
+    var ghost = document.createElement("div");
+    ghost.className = "drag-ghost";
+    track.appendChild(ghost);
+    dragState = { track: track, bName: bName, room: room, day: day, startHour: startHour, ghost: ghost };
+    updateGhost(startHour, startHour);
+    document.body.style.userSelect = "none";
+    e.preventDefault();
+  });
+
+  document.addEventListener("mousemove", function (e) {
+    if (!dragState) return;
+    var rect = dragState.track.getBoundingClientRect();
+    var curHour = pixelToHour(e.clientX, rect);
+    updateGhost(dragState.startHour, curHour);
+  });
+
+  document.addEventListener("mouseup", function (e) {
+    if (!dragState) return;
+    var rect = dragState.track.getBoundingClientRect();
+    var endHour = pixelToHour(e.clientX, rect);
+    var s = Math.min(dragState.startHour, endHour);
+    var en = Math.max(dragState.startHour, endHour);
+    dragState.ghost.remove();
+    document.body.style.userSelect = "";
+    var bName = dragState.bName, room = dragState.room, day = dragState.day;
+    dragState = null;
+    if (en - s >= 1) {
+      openAddClassModal({ b: bName, r: room, start: s, end: en, day: day });
+    }
+  });
+
+  /* ================= 좌측 요약 카드 / 하단 대기 목록 ================= */
+  function renderSummary() {
+    var rooms = state.myRooms;
+    var total = 0, pending = 0;
+    var pendingRows = [];
+    rooms.forEach(function (rm) {
+      var blocks = scheduleFor(rm.b, rm.r);
+      blocks.forEach(function (b, idx) {
+        if (!isBlockVisibleToday(b)) return;
+        total++;
+        if (b.status === "pending") { pending++; pendingRows.push({ b: rm.b, r: rm.r, idx: idx, item: b }); }
+      });
+    });
+    document.getElementById("sumRooms").textContent = rooms.length + "개";
+    document.getElementById("sumTotal").textContent = total + "건";
+    document.getElementById("sumPending").textContent = pending + "건";
+    document.getElementById("subbarPendingBadge").textContent = "승인 대기 " + pending + "건";
+    renderPendingBottomList(pendingRows);
+    renderConflictList(detectConflicts(pendingRows));
+    renderFloorGrid();
+  }
+
+  /* ================= 중복(충돌) 신청 자동 감지 ================= */
+  /* 같은 강의실 · 겹치는 시간대에 승인 대기중인 신청이 2건 이상이면 감지 */
+  function detectConflicts(pendingRows) {
+    var byRoom = {};
+    pendingRows.forEach(function (row) {
+      var key = roomKey(row.b, row.r);
+      if (!byRoom[key]) byRoom[key] = [];
+      byRoom[key].push(row);
+    });
+    var conflicts = [];
+    Object.keys(byRoom).forEach(function (key) {
+      var rows = byRoom[key];
+      for (var i = 0; i < rows.length; i++) {
+        for (var j = i + 1; j < rows.length; j++) {
+          var a = rows[i].item, b = rows[j].item;
+          if (a.start < b.end && b.start < a.end) {
+            conflicts.push({ b: rows[i].b, r: rows[i].r, first: rows[i], second: rows[j] });
+          }
+        }
+      }
+    });
+    return conflicts;
+  }
+
+  function renderConflictList(conflicts) {
+    var list = document.getElementById("conflictList");
+    if (!conflicts.length) {
+      list.innerHTML = '<div class="empty-hint">현재 감지된 중복 신청이 없습니다</div>';
+      return;
+    }
+    list.innerHTML = conflicts.map(function (c) {
+      var label = displayRoomName(c.b, c.r);
+      return '<div class="conflict-item" data-b="' + c.b + '" data-r="' + c.r + '" data-idx="' + c.first.idx + '">' +
+        '<span class="ci-icon">⚠</span>' +
+        '<span class="ci-room">' + label + '</span>' +
+        '<span class="ci-detail"><b>' + timeLabel(c.first.item.start) + '~' + timeLabel(c.first.item.end) + '</b> ' + c.first.item.applicant +
+        ' 　↔　 <b>' + timeLabel(c.second.item.start) + '~' + timeLabel(c.second.item.end) + '</b> ' + c.second.item.applicant +
+        ' 시간이 겹칩니다</span>' +
+        '</div>';
+    }).join("");
+  }
+
+  document.getElementById("conflictList").addEventListener("click", function (e) {
+    var item = e.target.closest(".conflict-item");
+    if (!item) return;
+    selectReservation(item.getAttribute("data-b"), item.getAttribute("data-r"), parseInt(item.getAttribute("data-idx"), 10));
+  });
+
+  function renderPendingBottomList(pendingRows) {
+    var list = document.getElementById("pendingListBottom");
+    if (!pendingRows.length) {
+      list.innerHTML = '<div class="empty-hint">현재 승인 대기중인 예약이 없습니다</div>';
+      return;
+    }
+    list.innerHTML = pendingRows.map(function (row) {
+      var label = displayRoomName(row.b, row.r);
+      return '<div class="pending-row" data-b="' + row.b + '" data-r="' + row.r + '" data-idx="' + row.idx + '">' +
+        '<span class="pr-room">' + label + '</span>' +
+        '<span class="pr-time">' + timeLabel(row.item.start) + '~' + timeLabel(row.item.end) + '</span>' +
+        '<span class="pr-sub">' + row.item.sub + '</span>' +
+        '<span class="pr-applicant">' + row.item.applicant + '</span>' +
+        '<span class="pr-actions">' +
+        '<button type="button" class="pr-btn pr-approve" data-action="approve">승인</button>' +
+        '<button type="button" class="pr-btn pr-reject" data-action="reject">거절</button>' +
+        '</span></div>';
+    }).join("");
+  }
+
+  document.getElementById("pendingListBottom").addEventListener("click", function (e) {
+    var row = e.target.closest(".pending-row");
+    if (!row) return;
+    var b = row.getAttribute("data-b");
+    var r = row.getAttribute("data-r");
+    var idx = parseInt(row.getAttribute("data-idx"), 10);
+    selectReservation(b, r, idx);
+
+    var actionBtn = e.target.closest(".pr-btn");
+    if (!actionBtn) return;
+    if (actionBtn.getAttribute("data-action") === "approve") openApproveModal();
+    else openRejectModal();
+  });
+
+  document.getElementById("jumpToPendingBtn").addEventListener("click", function () {
+    document.getElementById("pendingPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+
+  /* ================= 센터 타이틀 ================= */
+  function updateCenterTitle() {
+    document.getElementById("dateLabel").textContent = formatSelectedDate();
+    var label = "· 전체 담당 강의실";
+    if (state.selectedFilterKey) {
+      var match = state.myRooms.filter(function (rm) { return roomKey(rm.b, rm.r) === state.selectedFilterKey; })[0];
+      if (match) label = "· " + displayRoomName(match.b, match.r);
+    }
+    document.getElementById("buildingLabel").textContent = label;
+  }
+
+  /* ================= 렌더 묶음 ================= */
+  function renderTimelineAndPanels() {
+    updateCenterTitle();
+    renderTimeline();
+    renderSummary();
+  }
+
+  function renderAll() {
+    updateCenterTitle();
+
+    state.selection = { b: null, r: null, idx: null };
+    document.getElementById("roomTitleR").textContent = "강의실을 선택해주세요";
+    document.getElementById("roomMetaR").textContent = "타임라인의 블록을 클릭하세요";
+    document.getElementById("roomInfoR").textContent = "";
+    document.getElementById("editRoomFromDetailBtn").style.display = "none";
+    document.getElementById("detailBox").innerHTML = '<div class="empty-hint" style="padding:20px 0;">왼쪽에서 예약 건을 선택하세요</div>';
+    document.getElementById("adminComment").value = "";
+    document.getElementById("statusBanner").className = "status-banner";
+    document.getElementById("approveBtn").disabled = true;
+    document.getElementById("rejectBtn").disabled = true;
+
+    renderTimeline();
+    renderResvList();
+    renderSummary();
+
+    // 대기중 건이 있으면 담당 강의실 순서대로 첫 건 자동 선택
+    var rooms = visibleRooms();
+    for (var i = 0; i < rooms.length; i++) {
+      var blocks = scheduleFor(rooms[i].b, rooms[i].r);
+      var pendingIdx = blocks.findIndex(function (b) { return b.status === "pending"; });
+      if (pendingIdx !== -1) { selectReservation(rooms[i].b, rooms[i].r, pendingIdx); break; }
+    }
+  }
+</script>
+
+</body>
+</html>

@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>로그인 · 동서대학교 공간 예약 시스템</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+<style>
+  :root {
+    --primary: #B91C1C;
+    --primary-dark: #7F1010;
+    --primary-light: #D64545;
+    --accent: #C2410C;
+    --gradient-brand: linear-gradient(135deg, #7F1010 0%, #B91C1C 55%, #DC5F45 100%);
+    --success: #12805C; --success-bg: #E6F6EF;
+    --warning: #B7791F; --warning-bg: #FDF3E2;
+    --danger: #C13A3A; --danger-bg: #FCEBEB;
+    --gray-900: #1A1D23; --gray-700: #454B54; --gray-500: #767D89;
+    --gray-300: #D8DCE2; --gray-200: #E7E9ED; --gray-100: #F1F3F6; --gray-50: #F8F9FB;
+    --border: #E4E7EC;
+    --shadow-md: 0 8px 24px rgba(139,20,20,0.10);
+    --shadow-lg: 0 20px 48px rgba(139,20,20,0.16);
+    --radius-sm: 10px; --radius-md: 14px; --radius-lg: 20px;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%;
+    font-family: "Pretendard", -apple-system, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+    background: var(--gray-50);
+    color: var(--gray-900);
+  }
+  body { display: flex; flex-direction: column; }
+
+  header {
+    background: var(--primary); color: #fff; padding: 15px 30px;
+    display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+  }
+  header .title { font-size: 17px; font-weight: 700; letter-spacing: -0.2px; }
+
+  .wrap { flex: 1 1 auto; display: grid; grid-template-columns: 1fr 460px; }
+  @media (max-width: 900px) { .wrap { grid-template-columns: 1fr; } .visual { display: none; } }
+
+  /* ---------------- 좌측 비주얼 ---------------- */
+  .visual {
+    position: relative; color: #fff;
+    background:
+      linear-gradient(rgba(0,0,0,0.38), rgba(0,0,0,0.38)),
+      url("assets/campus.jpg");
+    background-size: cover;
+    background-position: center;
+    padding: 48px 64px; display: flex; flex-direction: column; justify-content: space-between;
+    overflow: hidden;
+  }
+  .visual-top { position: relative; z-index: 1; display: flex; align-items: center; gap: 12px; }
+  .logo-mark {
+    width: 40px; height: 40px; border-radius: 11px; background: #fff; color: var(--primary);
+    display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 16px;
+  }
+  .brand-name { font-size: 13px; font-weight: 600; letter-spacing: 1.2px; color: rgba(255,255,255,0.75); }
+
+  .visual-headline { position: relative; z-index: 1; margin-top: 40px; }
+  .visual-headline .eyebrow {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600;
+    color: rgba(255,255,255,0.85); background: rgba(255,255,255,0.14); padding: 6px 12px;
+    border-radius: 100px; margin-bottom: 18px;
+  }
+  .visual-headline h1 { font-size: 38px; line-height: 1.32; font-weight: 700; margin: 0 0 16px; letter-spacing: -0.6px; text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 4px 18px rgba(0,0,0,0.7); }
+  .visual-headline p { font-size: 15px; color: rgba(255,255,255,0.92); line-height: 1.75; max-width: 400px; margin: 0; text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 3px 14px rgba(0,0,0,0.6); }
+
+  .feature-list { position: relative; z-index: 1; margin-top: 40px; display: flex; flex-direction: column; gap: 18px; }
+  .feature-item { display: flex; align-items: flex-start; gap: 12px; }
+  .feature-icon {
+    width: 24px; height: 24px; border-radius: 50%; background: rgba(255,255,255,0.16); color: #fff;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 12px; font-weight: 700; margin-top: 1px;
+  }
+  .feature-item b { display: block; font-size: 14px; font-weight: 700; margin-bottom: 3px; text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 3px 14px rgba(0,0,0,0.6); }
+  .feature-item span { font-size: 12.5px; color: rgba(255,255,255,0.9); line-height: 1.6; text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 3px 14px rgba(0,0,0,0.6); }
+
+  .visual-bottom { position: relative; z-index: 1; font-size: 12px; color: rgba(255,255,255,0.5); }
+
+  /* ---------------- 우측 로그인 폼 ---------------- */
+  .form-side { display: flex; align-items: center; justify-content: center; padding: 40px 32px; background: #fff; }
+  .login-card { width: 100%; max-width: 340px; }
+
+  .login-card .kicker { font-size: 12px; font-weight: 700; color: var(--accent); letter-spacing: 0.4px; margin-bottom: 10px; }
+  .login-card h2 { font-size: 23px; font-weight: 700; color: var(--gray-900); margin: 0 0 8px; letter-spacing: -0.4px; }
+  .login-card .sub { font-size: 13.5px; color: var(--gray-500); margin: 0 0 26px; line-height: 1.6; }
+
+  /* 역할 탭 */
+  .role-tabs { display: flex; gap: 6px; background: var(--gray-100); border-radius: 100px; padding: 4px; margin-bottom: 24px; }
+  .role-tab {
+    flex: 1; text-align: center; padding: 9px 4px; border-radius: 100px; font-size: 12.5px; font-weight: 600;
+    color: var(--gray-500); cursor: pointer; transition: all .15s; border: none; background: none;
+  }
+  .role-tab.active { background: #fff; color: var(--primary); box-shadow: var(--shadow-md); }
+
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 12.5px; font-weight: 600; color: var(--gray-700); margin-bottom: 7px; }
+  .field input {
+    width: 100%; height: 44px; border: 1.5px solid var(--gray-200); border-radius: var(--radius-sm);
+    padding: 0 14px; font-size: 14px; font-family: inherit; background: var(--gray-50); color: var(--gray-900);
+    transition: border-color .12s, background .12s;
+  }
+  .field input:focus { outline: none; border-color: var(--primary-light); background: #fff; }
+
+  .row-between { display: flex; align-items: center; justify-content: space-between; margin: 2px 0 22px; }
+  .remember { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--gray-500); }
+  .remember input { width: 15px; height: 15px; accent-color: var(--primary); }
+  .link-muted { font-size: 12.5px; color: var(--gray-500); text-decoration: none; }
+  .link-muted:hover { color: var(--primary); }
+
+  .btn-login {
+    width: 100%; height: 46px; border: none; border-radius: var(--radius-sm);
+    background: var(--primary); color: #fff; font-size: 14.5px; font-weight: 700;
+    letter-spacing: 0.2px; cursor: pointer; transition: background .15s, transform .1s;
+  }
+  .btn-login:hover { background: var(--primary-dark); }
+  .btn-login:active { transform: scale(0.99); }
+
+  .divider { display: flex; align-items: center; gap: 10px; margin: 22px 0 16px; font-size: 11px; color: var(--gray-300); }
+  .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--gray-200); }
+
+  .quick-links { display: flex; justify-content: center; gap: 14px; font-size: 12.5px; }
+  .quick-links a { color: var(--gray-500); text-decoration: none; }
+  .quick-links a:hover { color: var(--primary); }
+  .quick-links .sep { color: var(--gray-200); }
+
+  .foot-note { margin-top: 30px; font-size: 11px; color: var(--gray-300); text-align: center; line-height: 1.7; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title">🏫 동서대학교 강의실 예약</div>
+</header>
+
+<div class="wrap">
+
+  <div class="visual">
+    <div class="visual-top">
+      <div class="logo-mark">DS</div>
+      <div class="brand-name">DONGSEO UNIVERSITY</div>
+    </div>
+
+    <div class="visual-headline">
+      <h1>동서대학교<br>공간 예약 시스템</h1>
+      <p>전화·방문 없이, 실시간으로 비어있는 강의실을 확인하고 바로 신청하세요.</p>
+    </div>
+
+    <div class="feature-list">
+      <div class="feature-item">
+        <span class="feature-icon">✓</span>
+        <div><b>실시간 예약 현황</b><span>강의실별 시간표를 한눈에 확인하고 빈 시간을 바로 찾아요</span></div>
+      </div>
+      <div class="feature-item">
+        <span class="feature-icon">✓</span>
+        <div><b>일일 대여 · 정규 강의 모두 지원</b><span>한 학기 반복 수업도 한 번의 신청으로 등록돼요</span></div>
+      </div>
+      <div class="feature-item">
+        <span class="feature-icon">✓</span>
+        <div><b>간편한 승인 절차</b><span>담당 조교의 승인만 거치면 바로 확정돼요</span></div>
+      </div>
+    </div>
+
+    <div class="visual-bottom">© Dongseo University · Space Reservation System</div>
+  </div>
+
+  <div class="form-side">
+    <div class="login-card">
+      <div class="kicker">SPACE RESERVATION</div>
+      <h2>로그인</h2>
+      <p class="sub">계정 유형을 선택하고 로그인해주세요.</p>
+
+      <div class="role-tabs" id="roleTabs">
+        <button type="button" class="role-tab active" data-role="user">예약자</button>
+        <button type="button" class="role-tab" data-role="staff">중간관리자</button>
+        <button type="button" class="role-tab" data-role="superadmin">최종관리자</button>
+      </div>
+
+      <form id="loginForm">
+        <div class="field">
+          <label id="idLabel" for="userId">이메일</label>
+          <input type="text" id="userId" placeholder="이메일을 입력하세요" autocomplete="username">
+        </div>
+        <div class="field">
+          <label for="userPw">비밀번호</label>
+          <input type="password" id="userPw" placeholder="비밀번호를 입력하세요" autocomplete="current-password">
+        </div>
+
+        <div class="row-between">
+          <label class="remember"><input type="checkbox" id="rememberMe"> 아이디 저장</label>
+          <a href="#" class="link-muted">비밀번호 찾기</a>
+        </div>
+
+        <button type="submit" class="btn-login" id="btnLogin">로그인</button>
+      </form>
+
+      <div class="divider">또는</div>
+
+      <div class="quick-links">
+        <a href="#">아이디 찾기</a><span class="sep">|</span>
+        <a href="#">회원가입</a><span class="sep">|</span>
+        <a href="#">이용 안내</a>
+      </div>
+
+      <div class="foot-note">개인정보처리방침</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  var MANAGERS = {
+    "sujeong": { name: "이수정 관리자", email: "sujeong@dongseo.ac.kr", rooms: ["UIT 201", "UIT 202", "UIT 301"] },
+    "gwanho":  { name: "박관호 관리자", email: "gwanho@dongseo.ac.kr", rooms: ["UIT 401", "UIT 402", "전자정보관 101"] },
+    "damdang": { name: "김담당 관리자", email: "damdang@dongseo.ac.kr", rooms: ["뉴밀레니엄관 110", "뉴밀레니엄관 210", "전자정보관 301"] }
+  };
+
+  var currentRole = "user";
+
+  var roleTabs = document.querySelectorAll(".role-tab");
+  var idLabel = document.getElementById("idLabel");
+  var userIdInput = document.getElementById("userId");
+  var btnLogin = document.getElementById("btnLogin");
+
+  function findManagerIdByEmail(email) {
+    var lower = email.toLowerCase();
+    var found = null;
+    Object.keys(MANAGERS).forEach(function (id) {
+      if (MANAGERS[id].email.toLowerCase() === lower) found = id;
+    });
+    return found;
+  }
+
+  function setRole(role) {
+    currentRole = role;
+    roleTabs.forEach(function (t) { t.classList.toggle("active", t.getAttribute("data-role") === role); });
+
+    idLabel.textContent = role === "superadmin" ? "관리자 이메일" : "이메일";
+    userIdInput.placeholder = role === "staff" ? "관리자 이메일을 입력하세요" :
+      (role === "superadmin" ? "최종관리자 이메일을 입력하세요" : "이메일을 입력하세요");
+  }
+
+  roleTabs.forEach(function (tab) {
+    tab.addEventListener("click", function () { setRole(tab.getAttribute("data-role")); });
+  });
+
+  document.getElementById("loginForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var id = userIdInput.value.trim();
+    var pw = document.getElementById("userPw").value.trim();
+
+    if (!id || !pw) {
+      alert("아이디와 비밀번호를 모두 입력해주세요.");
+      return;
+    }
+    if (currentRole === "staff") {
+      var managerId = findManagerIdByEmail(id) || Object.keys(MANAGERS)[0]; // 테스트 중: 아무 이메일이나 첫 번째 관리자로 로그인
+      sessionStorage.setItem("managerId", managerId);
+      window.location.href = "manager.html";
+    } else if (currentRole === "superadmin") {
+      window.location.href = "admin.html";
+    } else {
+      window.location.href = "index.html";
+    }
+  });
+</script>
+
+</body>
+</html>
