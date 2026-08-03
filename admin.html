@@ -186,7 +186,8 @@
 </header>
 
 <div class="subbar">
-  <button type="button" class="tab-btn active" data-tab="buildings">건물 관리</button>
+  <button type="button" class="tab-btn active" data-tab="requests">가입 승인 <span id="pendingRequestBadge" style="display:none;"></span></button>
+  <button type="button" class="tab-btn" data-tab="buildings">건물 관리</button>
   <button type="button" class="tab-btn" data-tab="rooms">강의실 관리</button>
   <button type="button" class="tab-btn" data-tab="managers">중간관리자 관리</button>
   <button type="button" class="tab-btn" data-tab="semesters">학기 관리</button>
@@ -194,8 +195,27 @@
 
 <div class="content">
 
+  <!-- ================= 탭 -1: 가입 승인 대기 ================= -->
+  <div class="tab-panel active" id="tabRequests">
+    <div class="toolbar">
+      <span class="stat-chip">승인 대기 <b id="requestCountLabel">0</b>건</span>
+    </div>
+
+    <div class="card-panel">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>이름</th><th>신청 유형</th><th>신청일</th><th style="text-align:right;">처리</th>
+          </tr>
+        </thead>
+        <tbody id="requestTableBody"></tbody>
+      </table>
+      <div class="empty-state" id="requestEmptyState" style="display:none;">대기 중인 가입 신청이 없어요.</div>
+    </div>
+  </div>
+
   <!-- ================= 탭 0: 건물 관리 ================= -->
-  <div class="tab-panel active" id="tabBuildings">
+  <div class="tab-panel" id="tabBuildings">
     <div class="toolbar">
       <span class="stat-chip">전체 <b id="buildingCountLabel">0</b>개</span>
       <button type="button" class="btn-primary" id="openAddBuildingBtn">＋ 건물 등록</button>
@@ -455,7 +475,9 @@
   var MID_ADMINS = [];             // role='mid_admin' (전체, 건물 무관)
   var UNASSIGNED_ASSISTANTS = [];  // role='assistant' (아직 승격 안 된 계정)
   var SEMESTERS = [];
+  var ROLE_REQUESTS = [];
   var roomBuildingFilterValue = '';
+  var ROLE_LABELS = { assistant: '예약자', mid_admin: '중간관리자', final_admin: '최종관리자' };
 
   var STATUS_LABELS = { available: '사용가능', maintenance: '공사중', renovation: '리모델링 예정', closed: '사용중지' };
 
@@ -484,11 +506,72 @@
   }
 
   async function refreshAll() {
-    await Promise.all([loadBuildings(), loadRooms(), loadMidAdmins(), loadSemesters()]);
+    await Promise.all([loadBuildings(), loadRooms(), loadMidAdmins(), loadSemesters(), loadRoleRequests()]);
     renderBuildingTable();
     renderRoomTable();
     renderManagerGrid();
     renderSemesterTable();
+    renderRequestTable();
+  }
+
+  async function loadRoleRequests() {
+    var res = await supabaseClient
+      .from('role_requests')
+      .select('id, assistant_id, requested_role, status, created_at, assistants!assistant_id(name)')
+      .eq('status', 'pending')
+      .order('created_at');
+    if (res.error) { console.error('loadRoleRequests failed:', res.error); }
+    ROLE_REQUESTS = res.data || [];
+  }
+
+  function renderRequestTable() {
+    var tbody = document.getElementById('requestTableBody');
+    document.getElementById('requestCountLabel').textContent = ROLE_REQUESTS.length;
+    document.getElementById('requestEmptyState').style.display = ROLE_REQUESTS.length ? 'none' : 'block';
+    var badge = document.getElementById('pendingRequestBadge');
+    if (ROLE_REQUESTS.length) { badge.style.display = 'inline'; badge.textContent = '(' + ROLE_REQUESTS.length + ')'; }
+    else { badge.style.display = 'none'; }
+
+    tbody.innerHTML = ROLE_REQUESTS.map(function (r) {
+      return '<tr>' +
+        '<td class="cell-room">' + escapeHtml(r.assistants ? r.assistants.name : '-') + '</td>' +
+        '<td>' + escapeHtml(ROLE_LABELS[r.requested_role] || r.requested_role) + '</td>' +
+        '<td>' + formatDateOnly(r.created_at) + '</td>' +
+        '<td style="text-align:right;">' +
+        '<button type="button" class="icon-btn" data-approve-req="' + r.id + '" style="margin-right:6px;">승인</button>' +
+        '<button type="button" class="icon-btn danger" data-reject-req="' + r.id + '">거절</button>' +
+        '</td></tr>';
+    }).join('');
+
+    tbody.querySelectorAll('[data-approve-req]').forEach(function (btn) {
+      btn.addEventListener('click', function () { reviewRoleRequest(parseInt(btn.getAttribute('data-approve-req'), 10), 'approved'); });
+    });
+    tbody.querySelectorAll('[data-reject-req]').forEach(function (btn) {
+      btn.addEventListener('click', function () { reviewRoleRequest(parseInt(btn.getAttribute('data-reject-req'), 10), 'rejected'); });
+    });
+  }
+
+  function formatDateOnly(iso) { return iso.slice(0, 10); }
+
+  async function reviewRoleRequest(requestId, decision) {
+    var req = ROLE_REQUESTS.filter(function (r) { return r.id === requestId; })[0];
+    if (!req) return;
+    var label = decision === 'approved' ? '승인' : '거절';
+    if (!confirm((req.assistants ? req.assistants.name : '이 사람') + '님의 ' + ROLE_LABELS[req.requested_role] + ' 신청을 ' + label + '하시겠습니까?')) return;
+
+    var res = await supabaseClient.from('role_requests').update({
+      status: decision, reviewed_by: CURRENT_USER.id, reviewed_at: new Date().toISOString()
+    }).eq('id', requestId).select('id');
+    if (res.error) { alert(label + ' 실패: ' + res.error.message); return; }
+    if (!res.data || !res.data.length) { alert(label + '이 적용되지 않았습니다 (권한 문제일 수 있어요).'); return; }
+
+    if (decision === 'approved') {
+      var roleRes = await supabaseClient.from('assistants').update({ role: req.requested_role }).eq('id', req.assistant_id).select('id');
+      if (roleRes.error) { alert('권한 부여 실패: ' + roleRes.error.message); return; }
+      if (!roleRes.data || !roleRes.data.length) { alert('권한이 부여되지 않았습니다 (권한 문제일 수 있어요).'); return; }
+    }
+
+    await refreshAll();
   }
 
   async function loadBuildings() {
@@ -528,6 +611,7 @@
     btn.addEventListener('click', function () {
       document.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.toggle('active', b === btn); });
       var tab = btn.getAttribute('data-tab');
+      document.getElementById('tabRequests').classList.toggle('active', tab === 'requests');
       document.getElementById('tabBuildings').classList.toggle('active', tab === 'buildings');
       document.getElementById('tabRooms').classList.toggle('active', tab === 'rooms');
       document.getElementById('tabManagers').classList.toggle('active', tab === 'managers');
