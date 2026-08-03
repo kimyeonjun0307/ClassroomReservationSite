@@ -643,12 +643,17 @@
     var checked = document.querySelectorAll('#amRoomCheckList input:checked');
     var roomIds = Array.prototype.slice.call(checked).map(function (cb) { return parseInt(cb.getAttribute('data-room-id'), 10); });
 
-    var updateRes = await supabaseClient.from('assistants').update({ role: 'mid_admin', building_id: MY_BUILDING_ID }).eq('id', assistantId);
+    var updateRes = await supabaseClient.from('assistants').update({ role: 'mid_admin', building_id: MY_BUILDING_ID }).eq('id', assistantId).select('id');
     if (updateRes.error) { errBox.textContent = '승격 실패: ' + updateRes.error.message; errBox.classList.add('show'); return; }
+    if (!updateRes.data || !updateRes.data.length) { errBox.textContent = '승격이 적용되지 않았습니다 (권한 문제일 수 있어요).'; errBox.classList.add('show'); return; }
 
     if (roomIds.length) {
-      var roomRes = await supabaseClient.from('rooms').update({ manager_id: assistantId }).in('id', roomIds);
+      var roomRes = await supabaseClient.from('rooms').update({ manager_id: assistantId }).in('id', roomIds).select('id');
       if (roomRes.error) { errBox.textContent = '강의실 배정 중 일부 실패: ' + roomRes.error.message; errBox.classList.add('show'); }
+      else if (!roomRes.data || roomRes.data.length < roomIds.length) {
+        errBox.textContent = '일부 강의실만 배정됐습니다 (' + (roomRes.data ? roomRes.data.length : 0) + '/' + roomIds.length + '건). 권한 문제일 수 있어요.';
+        errBox.classList.add('show');
+      }
     }
 
     addManagerModalOverlay.classList.remove('show');
@@ -678,8 +683,17 @@
     var toAdd = newIds.filter(function (id) { return oldIds.indexOf(id) === -1; });
     var toRemove = oldIds.filter(function (id) { return newIds.indexOf(id) === -1; });
 
-    if (toAdd.length) await supabaseClient.from('rooms').update({ manager_id: currentEditPermId }).in('id', toAdd);
-    if (toRemove.length) await supabaseClient.from('rooms').update({ manager_id: null }).in('id', toRemove);
+    if (toAdd.length) {
+      var addRes = await supabaseClient.from('rooms').update({ manager_id: currentEditPermId }).in('id', toAdd).select('id');
+      if (addRes.error) { alert('강의실 배정 실패: ' + addRes.error.message); return; }
+      if (!addRes.data || addRes.data.length < toAdd.length) {
+        alert('일부 강의실은 배정되지 않았습니다 (' + (addRes.data ? addRes.data.length : 0) + '/' + toAdd.length + '건만 적용됨). 권한 문제일 수 있어요.');
+      }
+    }
+    if (toRemove.length) {
+      var removeRes = await supabaseClient.from('rooms').update({ manager_id: null }).in('id', toRemove).select('id');
+      if (removeRes.error) { alert('배정 해제 실패: ' + removeRes.error.message); return; }
+    }
 
     editPermModalOverlay.classList.remove('show');
     await refreshAll();
