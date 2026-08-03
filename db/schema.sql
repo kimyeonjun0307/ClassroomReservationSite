@@ -34,16 +34,16 @@ CREATE TYPE booking_action AS ENUM ('submit', 'approve', 'reject', 'cancel');
 -- ============================================================
 -- id = auth.users.id : 비밀번호/이메일 인증은 Supabase Auth가 담당하고, 여기는 프로필+권한만 관리.
 -- 이 방식이 자체 password_hash 컬럼을 두는 것보다 낫습니다 (비밀번호 보안 책임을 직접 안 짐).
+-- 최종관리자(final_admin)는 특정 건물에 속하지 않고 전체 건물/강의실을 총괄합니다.
+-- 중간관리자(mid_admin)의 담당 범위도 건물 단위가 아니라 rooms.manager_id로 강의실 하나하나
+-- 직접 배정되는 방식이라, 이 테이블에 건물 소속 컬럼 자체가 필요 없습니다.
 CREATE TABLE assistants (
     id            UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     name          VARCHAR(50) NOT NULL,
     role          assistant_role NOT NULL DEFAULT 'assistant',
-    building_id   BIGINT,  -- final_admin/mid_admin이 소속된 건물. FK는 buildings 테이블 생성 후 아래에서 추가.
     is_active     BOOLEAN NOT NULL DEFAULT TRUE,     -- '계정 삭제'는 실제로는 이걸 FALSE로 (아래 노트 참고)
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
--- 주의: buildings 테이블이 아직 안 만들어진 시점에 FK를 걸 수 없어서, 아래 buildings 생성 후
--- ALTER TABLE로 building_id FK를 추가합니다 (섹션 2 마지막 참고).
 
 -- 왜 계정을 진짜로 DELETE하지 않고 is_active로 죽이나:
 --   assistants.id를 bookings.requester_id, booking_logs.actor_id 등 여러 테이블이 참조하고 있어서
@@ -83,9 +83,6 @@ CREATE TABLE buildings (
     has_equipment BOOLEAN NOT NULL DEFAULT FALSE,  -- 기자재 선택 UI 노출 여부 (UIT관 = false)
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
-ALTER TABLE assistants
-    ADD CONSTRAINT fk_assistants_building FOREIGN KEY (building_id) REFERENCES buildings(id);
 
 
 -- ============================================================
@@ -368,11 +365,6 @@ LANGUAGE sql SECURITY DEFINER SET search_path = public STABLE AS $$
     SELECT role FROM assistants WHERE id = auth.uid();
 $$;
 
-CREATE OR REPLACE FUNCTION public.current_building_id() RETURNS BIGINT
-LANGUAGE sql SECURITY DEFINER SET search_path = public STABLE AS $$
-    SELECT building_id FROM assistants WHERE id = auth.uid();
-$$;
-
 CREATE OR REPLACE FUNCTION public.is_manager_of_room(target_room_id BIGINT) RETURNS BOOLEAN
 LANGUAGE sql SECURITY DEFINER SET search_path = public STABLE AS $$
     SELECT EXISTS (SELECT 1 FROM rooms WHERE id = target_room_id AND manager_id = auth.uid());
@@ -391,28 +383,24 @@ ALTER TABLE booking_equipment ENABLE ROW LEVEL SECURITY;
 ALTER TABLE booking_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE favorites ENABLE ROW LEVEL SECURITY;
 
--- ---- assistants: 본인 행 조회/수정, final_admin은 전체 조회 + role/건물 배정 수정 ----
+-- ---- assistants: 본인 행 조회/수정, final_admin은 전체 조회 + role 변경(승격/강등) ----
 CREATE POLICY assistants_select ON assistants FOR SELECT
     USING (id = auth.uid() OR current_assistant_role() = 'final_admin');
 
 CREATE POLICY assistants_update_self ON assistants FOR UPDATE
     USING (id = auth.uid());
 
--- USING은 '수정 대상으로 고를 수 있는 행'(아직 미배정이거나 이미 내 건물 소속),
--- WITH CHECK은 '수정 후 결과값'(반드시 내 건물 소속으로 남아야 함)을 검사합니다.
--- 이렇게 안 나누면 building_id=NULL인 신규 가입자를 mid_admin으로 승격시킬 방법이 없습니다.
+-- final_admin은 건물에 묶이지 않는 총괄 관리자라, 어떤 assistant든 role을 바꿀 수 있음
 CREATE POLICY assistants_manage_by_final_admin ON assistants FOR UPDATE
-    USING (current_assistant_role() = 'final_admin' AND (building_id IS NULL OR building_id = current_building_id()))
-    WITH CHECK (current_assistant_role() = 'final_admin' AND building_id = current_building_id());
+    USING (current_assistant_role() = 'final_admin')
+    WITH CHECK (current_assistant_role() = 'final_admin');
 
--- ---- buildings: 전체 조회 가능, 수정은 자기 건물만 final_admin ----
+-- ---- buildings: 전체 조회 가능, 등록/수정/삭제는 final_admin 누구나 (건물 개수 제한 없음) ----
 CREATE POLICY buildings_select ON buildings FOR SELECT USING (TRUE);
 
-CREATE POLICY buildings_update_by_final_admin ON buildings FOR UPDATE
-    USING (current_assistant_role() = 'final_admin' AND id = current_building_id());
--- 새 건물 추가(INSERT)는 final_admin이 자기 건물이 아직 없는 상태라 이 정책으론 못 만듭니다.
--- 지금은 건물 단위 권한만 있고 총괄 관리자가 없기로 하셨으니, 신규 건물 추가는 서비스 롤(백엔드/콘솔)에서
--- 수동으로 하고 그 다음 담당 final_admin을 assistants.building_id로 연결하는 흐름을 권장합니다.
+CREATE POLICY buildings_manage_by_final_admin ON buildings FOR ALL
+    USING (current_assistant_role() = 'final_admin')
+    WITH CHECK (current_assistant_role() = 'final_admin');
 
 -- ---- room_types / equipment: 전역 마스터라 전체 조회, 수정은 final_admin 누구나 ----
 CREATE POLICY room_types_select ON room_types FOR SELECT USING (TRUE);
@@ -423,12 +411,12 @@ CREATE POLICY equipment_select ON equipment FOR SELECT USING (TRUE);
 CREATE POLICY equipment_manage ON equipment FOR ALL
     USING (current_assistant_role() = 'final_admin') WITH CHECK (current_assistant_role() = 'final_admin');
 
--- ---- rooms: 전체 조회 가능, CRUD는 같은 건물의 final_admin만 ----
+-- ---- rooms: 전체 조회 가능, CRUD는 final_admin 누구나 (건물 무관, 전체 총괄) ----
 CREATE POLICY rooms_select ON rooms FOR SELECT USING (TRUE);
 
 CREATE POLICY rooms_manage_by_final_admin ON rooms FOR ALL
-    USING (current_assistant_role() = 'final_admin' AND building_id = current_building_id())
-    WITH CHECK (current_assistant_role() = 'final_admin' AND building_id = current_building_id());
+    USING (current_assistant_role() = 'final_admin')
+    WITH CHECK (current_assistant_role() = 'final_admin');
 
 -- 담당 중간관리자는 자기 강의실 정보(이름/수용인원/이용수칙/문의처)를 직접 수정 가능 (manager.html)
 CREATE POLICY rooms_update_by_manager ON rooms FOR UPDATE
@@ -437,39 +425,27 @@ CREATE POLICY rooms_update_by_manager ON rooms FOR UPDATE
 
 CREATE POLICY room_equipment_select ON room_equipment FOR SELECT USING (TRUE);
 CREATE POLICY room_equipment_manage ON room_equipment FOR ALL
-    USING (is_manager_of_room(room_id) OR EXISTS (
-        SELECT 1 FROM rooms r WHERE r.id = room_id
-          AND current_assistant_role() = 'final_admin' AND r.building_id = current_building_id()
-    ));
+    USING (is_manager_of_room(room_id) OR current_assistant_role() = 'final_admin')
+    WITH CHECK (is_manager_of_room(room_id) OR current_assistant_role() = 'final_admin');
 
 -- ---- semesters: 전체 조회, 등록/수정은 final_admin (admin.html 학기 관리 탭) ----
 CREATE POLICY semesters_select ON semesters FOR SELECT USING (TRUE);
 CREATE POLICY semesters_manage ON semesters FOR ALL
     USING (current_assistant_role() = 'final_admin') WITH CHECK (current_assistant_role() = 'final_admin');
 
--- ---- class_schedules: 전체 조회. 등록/수정 주체가 mid_admin인지 final_admin인지 아직 미확정이라
--- (위 노트 참고) 둘 다 허용 - 확정되면 하나로 좁혀주세요.
+-- ---- class_schedules: 전체 조회, 등록/수정은 담당 중간관리자 또는 final_admin ----
 CREATE POLICY class_schedules_select ON class_schedules FOR SELECT USING (TRUE);
 CREATE POLICY class_schedules_manage ON class_schedules FOR ALL
-    USING (
-        is_manager_of_room(room_id)
-        OR EXISTS (SELECT 1 FROM rooms r WHERE r.id = room_id
-                     AND current_assistant_role() = 'final_admin' AND r.building_id = current_building_id())
-    )
-    WITH CHECK (
-        is_manager_of_room(room_id)
-        OR EXISTS (SELECT 1 FROM rooms r WHERE r.id = room_id
-                     AND current_assistant_role() = 'final_admin' AND r.building_id = current_building_id())
-    );
+    USING (is_manager_of_room(room_id) OR current_assistant_role() = 'final_admin')
+    WITH CHECK (is_manager_of_room(room_id) OR current_assistant_role() = 'final_admin');
 
 -- ---- bookings ----
--- 조회: 신청자 본인 / 담당 중간관리자 / 같은 건물 final_admin
+-- 조회: 신청자 본인 / 담당 중간관리자 / final_admin(전체 오버사이트)
 CREATE POLICY bookings_select ON bookings FOR SELECT
     USING (
         requester_id = auth.uid()
         OR is_manager_of_room(room_id)
-        OR EXISTS (SELECT 1 FROM rooms r WHERE r.id = room_id
-                     AND current_assistant_role() = 'final_admin' AND r.building_id = current_building_id())
+        OR current_assistant_role() = 'final_admin'
     );
 
 -- 신청: 로그인한 사람이 자기 이름으로만, 그리고 조교(assistant) 역할만 (mid_admin/final_admin은 예약 신청 대상 아님)
@@ -517,7 +493,7 @@ GRANT SELECT ON public.room_busy_slots TO authenticated;
 
 
 -- ============================================================
--- 14. 보안 수정: 본인이 role/building_id를 스스로 바꾸는 것을 막음
+-- 14. 보안 수정: 본인이 role을 스스로 바꾸는 것을 막음
 -- ============================================================
 -- assistants_update_self 정책은 "본인 행인지"만 확인해서, 로그인한 일반 assistant가
 -- 자기 role을 final_admin으로 셀프 승격시킬 수 있는 구멍이 있었다. RLS는 행 단위
@@ -534,9 +510,8 @@ BEGIN
         RETURN NEW;
     END IF;
 
-    IF (NEW.role IS DISTINCT FROM OLD.role OR NEW.building_id IS DISTINCT FROM OLD.building_id)
-       AND current_assistant_role() <> 'final_admin' THEN
-        RAISE EXCEPTION 'role, building_id는 final_admin만 변경할 수 있습니다';
+    IF NEW.role IS DISTINCT FROM OLD.role AND current_assistant_role() <> 'final_admin' THEN
+        RAISE EXCEPTION 'role은 final_admin만 변경할 수 있습니다';
     END IF;
     RETURN NEW;
 END;

@@ -186,15 +186,36 @@
 </header>
 
 <div class="subbar">
-  <button type="button" class="tab-btn active" data-tab="rooms">강의실 관리</button>
+  <button type="button" class="tab-btn active" data-tab="buildings">건물 관리</button>
+  <button type="button" class="tab-btn" data-tab="rooms">강의실 관리</button>
   <button type="button" class="tab-btn" data-tab="managers">중간관리자 관리</button>
   <button type="button" class="tab-btn" data-tab="semesters">학기 관리</button>
 </div>
 
 <div class="content">
 
+  <!-- ================= 탭 0: 건물 관리 ================= -->
+  <div class="tab-panel active" id="tabBuildings">
+    <div class="toolbar">
+      <span class="stat-chip">전체 <b id="buildingCountLabel">0</b>개</span>
+      <button type="button" class="btn-primary" id="openAddBuildingBtn">＋ 건물 등록</button>
+    </div>
+
+    <div class="card-panel">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>건물명</th><th>문의 담당부서</th><th>전화</th><th>이메일</th><th>기자재 기능</th><th style="text-align:right;">관리</th>
+          </tr>
+        </thead>
+        <tbody id="buildingTableBody"></tbody>
+      </table>
+      <div class="empty-state" id="buildingEmptyState" style="display:none;">등록된 건물이 없어요.</div>
+    </div>
+  </div>
+
   <!-- ================= 탭 1: 강의실 관리 ================= -->
-  <div class="tab-panel active" id="tabRooms">
+  <div class="tab-panel" id="tabRooms">
     <div class="toolbar">
       <div class="toolbar-left">
         <select id="roomBuildingFilter"></select>
@@ -248,12 +269,52 @@
 
 </div>
 
+<!-- 건물 등록/수정 모달 -->
+<div class="modal-overlay" id="addBuildingModalOverlay">
+  <div class="modal-box">
+    <div class="modal-title" id="abModalTitle">건물 등록</div>
+    <div class="modal-desc">건물 정보를 입력해주세요.</div>
+
+    <div class="field">
+      <label>건물명</label>
+      <input type="text" id="abName" placeholder="예: 전자정보관">
+    </div>
+    <div class="field">
+      <label>문의 담당부서</label>
+      <input type="text" id="abContactDept" placeholder="예: 전자정보관 시설관리팀">
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>문의 전화</label>
+        <input type="text" id="abContactPhone" placeholder="예: 051-320-1234">
+      </div>
+      <div class="field">
+        <label>문의 이메일</label>
+        <input type="text" id="abContactEmail" placeholder="예: facility@dongseo.ac.kr">
+      </div>
+    </div>
+    <div class="field">
+      <label><input type="checkbox" id="abHasEquipment" style="width:auto; height:auto; margin-right:6px;">이 건물은 강의실별 기자재 선택 기능을 사용함</label>
+    </div>
+    <div class="error-box" id="abErrorBox"></div>
+
+    <div class="modal-actions">
+      <button type="button" class="modal-btn-cancel" id="abCancelBtn">취소</button>
+      <button type="button" class="modal-btn-confirm" id="abSaveBtn">등록</button>
+    </div>
+  </div>
+</div>
+
 <!-- 강의실 추가 모달 -->
 <div class="modal-overlay" id="addRoomModalOverlay">
   <div class="modal-box">
     <div class="modal-title">강의실 추가</div>
     <div class="modal-desc">새 강의실 정보를 입력해주세요.</div>
 
+    <div class="field">
+      <label>건물</label>
+      <select id="arBuilding"></select>
+    </div>
     <div class="field-row">
       <div class="field">
         <label>층 (지하는 음수, 예: -3)</label>
@@ -388,12 +449,13 @@
 <script src="assets/js/supabase-client.js"></script>
 <script>
   var CURRENT_USER = null;
-  var MY_BUILDING_ID = null;
+  var BUILDINGS = [];
   var ROOM_TYPES = [];
   var ROOMS = [];
-  var MID_ADMINS = [];       // role='mid_admin' AND building_id=내 건물
-  var UNASSIGNED_ASSISTANTS = []; // role='assistant' (아직 승격 안 된 계정)
+  var MID_ADMINS = [];             // role='mid_admin' (전체, 건물 무관)
+  var UNASSIGNED_ASSISTANTS = [];  // role='assistant' (아직 승격 안 된 계정)
   var SEMESTERS = [];
+  var roomBuildingFilterValue = '';
 
   var STATUS_LABELS = { available: '사용가능', maintenance: '공사중', renovation: '리모델링 예정', closed: '사용중지' };
 
@@ -409,13 +471,7 @@
     var auth = await requireRole(['final_admin']);
     if (!auth) return;
     CURRENT_USER = auth.session.user;
-    MY_BUILDING_ID = auth.profile.building_id;
     document.getElementById('logoutBtn').addEventListener('click', signOutAndRedirect);
-
-    if (!MY_BUILDING_ID) {
-      alert('이 계정에 담당 건물이 지정되어 있지 않습니다. SQL Editor에서 assistants.building_id를 설정해주세요.');
-      return;
-    }
 
     await loadRoomTypes();
     await refreshAll();
@@ -428,17 +484,27 @@
   }
 
   async function refreshAll() {
-    await Promise.all([loadRooms(), loadMidAdmins(), loadSemesters()]);
+    await Promise.all([loadBuildings(), loadRooms(), loadMidAdmins(), loadSemesters()]);
+    renderBuildingTable();
     renderRoomTable();
     renderManagerGrid();
     renderSemesterTable();
   }
 
+  async function loadBuildings() {
+    var res = await supabaseClient.from('buildings').select('id, name, contact_dept, contact_phone, contact_email, has_equipment').order('name');
+    if (res.error) { console.error('loadBuildings failed:', res.error); alert('건물 목록을 불러오지 못했습니다: ' + res.error.message); }
+    BUILDINGS = res.data || [];
+    document.getElementById('arBuilding').innerHTML = BUILDINGS.map(function (b) { return '<option value="' + b.id + '">' + escapeHtml(b.name) + '</option>'; }).join('');
+    var filterSel = document.getElementById('roomBuildingFilter');
+    filterSel.innerHTML = '<option value="">전체 건물</option>' + BUILDINGS.map(function (b) { return '<option value="' + b.id + '">' + escapeHtml(b.name) + '</option>'; }).join('');
+    filterSel.value = roomBuildingFilterValue;
+  }
+
   async function loadRooms() {
     var res = await supabaseClient
       .from('rooms')
-      .select('id, floor, room_no, room_name, capacity, status, manager_id, room_types(name), room_equipment(equipment(name)), manager:assistants(name)')
-      .eq('building_id', MY_BUILDING_ID)
+      .select('id, floor, room_no, room_name, capacity, status, manager_id, building_id, buildings(name), room_types(name), room_equipment(equipment(name)), manager:assistants(name)')
       .eq('is_active', true)
       .order('floor').order('room_no');
     if (res.error) { console.error('loadRooms failed:', res.error); alert('강의실 목록을 불러오지 못했습니다: ' + res.error.message); }
@@ -446,7 +512,7 @@
   }
 
   async function loadMidAdmins() {
-    var res = await supabaseClient.from('assistants').select('id, name, is_active').eq('role', 'mid_admin').eq('building_id', MY_BUILDING_ID).order('name');
+    var res = await supabaseClient.from('assistants').select('id, name, is_active').eq('role', 'mid_admin').order('name');
     MID_ADMINS = res.data || [];
     var res2 = await supabaseClient.from('assistants').select('id, name').eq('role', 'assistant').order('name');
     UNASSIGNED_ASSISTANTS = res2.data || [];
@@ -462,30 +528,120 @@
     btn.addEventListener('click', function () {
       document.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.toggle('active', b === btn); });
       var tab = btn.getAttribute('data-tab');
+      document.getElementById('tabBuildings').classList.toggle('active', tab === 'buildings');
       document.getElementById('tabRooms').classList.toggle('active', tab === 'rooms');
       document.getElementById('tabManagers').classList.toggle('active', tab === 'managers');
       document.getElementById('tabSemesters').classList.toggle('active', tab === 'semesters');
     });
   });
 
+  /* ================= 건물 관리 탭 ================= */
+  function renderBuildingTable() {
+    var tbody = document.getElementById('buildingTableBody');
+    document.getElementById('buildingCountLabel').textContent = BUILDINGS.length;
+    document.getElementById('buildingEmptyState').style.display = BUILDINGS.length ? 'none' : 'block';
+
+    tbody.innerHTML = BUILDINGS.map(function (b) {
+      return '<tr>' +
+        '<td class="cell-room">' + escapeHtml(b.name) + '</td>' +
+        '<td>' + (b.contact_dept ? escapeHtml(b.contact_dept) : '<span class="cell-muted">-</span>') + '</td>' +
+        '<td>' + (b.contact_phone ? escapeHtml(b.contact_phone) : '<span class="cell-muted">-</span>') + '</td>' +
+        '<td>' + (b.contact_email ? escapeHtml(b.contact_email) : '<span class="cell-muted">-</span>') + '</td>' +
+        '<td>' + (b.has_equipment ? '사용' : '<span class="cell-muted">미사용</span>') + '</td>' +
+        '<td style="text-align:right;"><button type="button" class="icon-btn" data-edit-building="' + b.id + '">수정</button></td>' +
+        '</tr>';
+    }).join('');
+
+    tbody.querySelectorAll('[data-edit-building]').forEach(function (btn) {
+      btn.addEventListener('click', function () { openEditBuildingModal(parseInt(btn.getAttribute('data-edit-building'), 10)); });
+    });
+  }
+
+  var addBuildingModalOverlay = document.getElementById('addBuildingModalOverlay');
+  var pendingEditBuildingId = null;
+
+  document.getElementById('openAddBuildingBtn').addEventListener('click', function () {
+    pendingEditBuildingId = null;
+    document.getElementById('abModalTitle').textContent = '건물 등록';
+    document.getElementById('abSaveBtn').textContent = '등록';
+    document.getElementById('abName').value = '';
+    document.getElementById('abContactDept').value = '';
+    document.getElementById('abContactPhone').value = '';
+    document.getElementById('abContactEmail').value = '';
+    document.getElementById('abHasEquipment').checked = false;
+    document.getElementById('abErrorBox').classList.remove('show');
+    addBuildingModalOverlay.classList.add('show');
+  });
+  document.getElementById('abCancelBtn').addEventListener('click', function () { addBuildingModalOverlay.classList.remove('show'); });
+
+  function openEditBuildingModal(id) {
+    var b = BUILDINGS.filter(function (x) { return x.id === id; })[0];
+    if (!b) return;
+    pendingEditBuildingId = id;
+    document.getElementById('abModalTitle').textContent = '건물 정보 수정';
+    document.getElementById('abSaveBtn').textContent = '저장';
+    document.getElementById('abName').value = b.name;
+    document.getElementById('abContactDept').value = b.contact_dept || '';
+    document.getElementById('abContactPhone').value = b.contact_phone || '';
+    document.getElementById('abContactEmail').value = b.contact_email || '';
+    document.getElementById('abHasEquipment').checked = !!b.has_equipment;
+    document.getElementById('abErrorBox').classList.remove('show');
+    addBuildingModalOverlay.classList.add('show');
+  }
+
+  document.getElementById('abSaveBtn').addEventListener('click', async function () {
+    var errBox = document.getElementById('abErrorBox');
+    var name = document.getElementById('abName').value.trim();
+    if (!name) { errBox.textContent = '건물명을 입력해주세요.'; errBox.classList.add('show'); return; }
+
+    var payload = {
+      name: name,
+      contact_dept: document.getElementById('abContactDept').value.trim() || null,
+      contact_phone: document.getElementById('abContactPhone').value.trim() || null,
+      contact_email: document.getElementById('abContactEmail').value.trim() || null,
+      has_equipment: document.getElementById('abHasEquipment').checked
+    };
+
+    var res;
+    if (pendingEditBuildingId) {
+      res = await supabaseClient.from('buildings').update(payload).eq('id', pendingEditBuildingId);
+    } else {
+      res = await supabaseClient.from('buildings').insert(payload);
+    }
+    if (res.error) {
+      errBox.textContent = res.error.message.indexOf('duplicate') !== -1 ? '이미 존재하는 건물명이에요.' : ('저장 실패: ' + res.error.message);
+      errBox.classList.add('show');
+      return;
+    }
+    addBuildingModalOverlay.classList.remove('show');
+    await loadBuildings();
+    renderBuildingTable();
+  });
+
   /* ================= 강의실 관리 탭 ================= */
   function managerNameOf(room) { return room.manager ? room.manager.name : null; }
 
+  function visibleRooms() {
+    if (!roomBuildingFilterValue) return ROOMS;
+    return ROOMS.filter(function (r) { return String(r.building_id) === roomBuildingFilterValue; });
+  }
+
   function renderRoomTable() {
     var tbody = document.getElementById('roomTableBody');
-    document.getElementById('roomCountLabel').textContent = ROOMS.length;
-    document.getElementById('roomEmptyState').style.display = ROOMS.length ? 'none' : 'block';
+    var rooms = visibleRooms();
+    document.getElementById('roomCountLabel').textContent = rooms.length;
+    document.getElementById('roomEmptyState').style.display = rooms.length ? 'none' : 'block';
 
-    tbody.innerHTML = ROOMS.map(function (rm) {
+    tbody.innerHTML = rooms.map(function (rm) {
       var equipNames = (rm.room_equipment || []).map(function (re) { return re.equipment.name; }).join(', ') || '-';
       var mgrName = managerNameOf(rm);
       var mgrChip = mgrName ? '<span class="manager-chip">' + escapeHtml(mgrName) + '</span>' : '<span class="manager-chip none">미배정</span>';
       var statusSelect = '<select class="status-select st-' + rm.status + '" data-status-room="' + rm.id + '">' +
         Object.keys(STATUS_LABELS).map(function (s) { return '<option value="' + s + '"' + (s === rm.status ? ' selected' : '') + '>' + STATUS_LABELS[s] + '</option>'; }).join('') + '</select>';
       return '<tr>' +
+        '<td>' + (rm.buildings ? escapeHtml(rm.buildings.name) : '-') + '</td>' +
         '<td>' + floorLabelText(rm.floor) + '</td>' +
         '<td class="cell-room">' + escapeHtml(rm.room_name) + '</td>' +
-        '<td>' + (rm.room_types ? escapeHtml(rm.room_types.name) : '-') + '</td>' +
         '<td>' + rm.capacity + '명</td>' +
         '<td>' + escapeHtml(equipNames) + '</td>' +
         '<td>' + statusSelect + '</td>' +
@@ -509,11 +665,10 @@
     });
   }
 
-  /* 헤더의 건물 필터/카운트는 지금은 항상 내 담당 건물 한 곳만 표시 (final_admin은 건물 하나에만 스코프됨) */
-  (function hideBuildingFilter() {
-    var sel = document.getElementById('roomBuildingFilter');
-    sel.style.display = 'none';
-  })();
+  document.getElementById('roomBuildingFilter').addEventListener('change', function (e) {
+    roomBuildingFilterValue = e.target.value;
+    renderRoomTable();
+  });
 
   /* ---------- 강의실 추가 ---------- */
   var addRoomModalOverlay = document.getElementById('addRoomModalOverlay');
@@ -529,23 +684,25 @@
 
   document.getElementById('arSaveBtn').addEventListener('click', async function () {
     var errBox = document.getElementById('arErrorBox');
+    var buildingId = parseInt(document.getElementById('arBuilding').value, 10);
     var floor = parseInt(document.getElementById('arFloor').value, 10);
     var roomNo = document.getElementById('arRoomNumber').value.trim();
     var roomName = document.getElementById('arRoomName').value.trim();
     var roomTypeId = parseInt(document.getElementById('arRoomType').value, 10);
     var capacity = parseInt(document.getElementById('arCapacity').value, 10);
 
+    if (!buildingId) { errBox.textContent = '건물을 먼저 등록해주세요.'; errBox.classList.add('show'); return; }
     if (isNaN(floor)) { errBox.textContent = '층을 숫자로 입력해주세요.'; errBox.classList.add('show'); return; }
     if (!roomNo) { errBox.textContent = '호실 번호를 입력해주세요.'; errBox.classList.add('show'); return; }
     if (!roomName) { errBox.textContent = '강의실명을 입력해주세요.'; errBox.classList.add('show'); return; }
     if (!capacity) { errBox.textContent = '수용 인원을 입력해주세요.'; errBox.classList.add('show'); return; }
 
     var res = await supabaseClient.from('rooms').insert({
-      building_id: MY_BUILDING_ID, floor: floor, room_no: roomNo, room_name: roomName,
+      building_id: buildingId, floor: floor, room_no: roomNo, room_name: roomName,
       room_type_id: roomTypeId, capacity: capacity
     });
     if (res.error) {
-      errBox.textContent = res.error.message.indexOf('duplicate') !== -1 ? '이미 존재하는 호실 번호예요.' : ('추가 실패: ' + res.error.message);
+      errBox.textContent = res.error.message.indexOf('duplicate') !== -1 ? '이 건물에 이미 존재하는 호실 번호예요.' : ('추가 실패: ' + res.error.message);
       errBox.classList.add('show');
       return;
     }
@@ -576,7 +733,7 @@
     renderRoomTable();
   });
 
-  /* ================= 중간관리자 관리 탭 ================= */
+  /* ================= 중간관리자 관리 탭 (건물 무관, 전체) ================= */
   function renderManagerGrid() {
     var grid = document.getElementById('managerGrid');
     document.getElementById('managerCountLabel').textContent = MID_ADMINS.length;
@@ -589,7 +746,7 @@
     grid.innerHTML = MID_ADMINS.map(function (m) {
       var myRooms = ROOMS.filter(function (r) { return r.manager_id === m.id; });
       var chips = myRooms.length
-        ? myRooms.map(function (r) { return '<span class="manager-chip">' + escapeHtml(r.room_name) + '</span>'; }).join('')
+        ? myRooms.map(function (r) { return '<span class="manager-chip">' + escapeHtml((r.buildings ? r.buildings.name + ' ' : '') + r.room_name) + '</span>'; }).join('')
         : '<span class="manager-chip none">담당 강의실 없음</span>';
       return '<div class="manager-card">' +
         '<div class="manager-card-head">' +
@@ -612,12 +769,22 @@
     });
   }
 
+  // 건물이 여러 개일 수 있으니, 체크리스트를 건물별로 묶어서 보여줌
   function buildRoomCheckListHTML(checkedIds, excludeManagerId) {
-    return ROOMS.map(function (r) {
-      var checked = checkedIds.indexOf(r.id) !== -1 ? ' checked' : '';
-      var takenLabel = '';
-      if (r.manager_id && r.manager_id !== excludeManagerId) takenLabel = '<span class="rcl-taken">' + escapeHtml(managerNameOf(r) || '') + ' 담당중</span>';
-      return '<label class="rcl-item"><input type="checkbox" data-room-id="' + r.id + '"' + checked + '>' + escapeHtml(r.room_name) + takenLabel + '</label>';
+    var byBuilding = {};
+    BUILDINGS.forEach(function (b) { byBuilding[b.id] = { name: b.name, rooms: [] }; });
+    ROOMS.forEach(function (r) { if (byBuilding[r.building_id]) byBuilding[r.building_id].rooms.push(r); });
+
+    return BUILDINGS.map(function (b) {
+      var group = byBuilding[b.id];
+      if (!group.rooms.length) return '';
+      var itemsHtml = group.rooms.map(function (r) {
+        var checked = checkedIds.indexOf(r.id) !== -1 ? ' checked' : '';
+        var takenLabel = '';
+        if (r.manager_id && r.manager_id !== excludeManagerId) takenLabel = '<span class="rcl-taken">' + escapeHtml(managerNameOf(r) || '') + ' 담당중</span>';
+        return '<label class="rcl-item"><input type="checkbox" data-room-id="' + r.id + '"' + checked + '>' + escapeHtml(r.room_name) + takenLabel + '</label>';
+      }).join('');
+      return '<div class="rcl-building-name">' + escapeHtml(group.name) + '</div>' + itemsHtml;
     }).join('');
   }
 
@@ -644,7 +811,7 @@
     var checked = document.querySelectorAll('#amRoomCheckList input:checked');
     var roomIds = Array.prototype.slice.call(checked).map(function (cb) { return parseInt(cb.getAttribute('data-room-id'), 10); });
 
-    var updateRes = await supabaseClient.from('assistants').update({ role: 'mid_admin', building_id: MY_BUILDING_ID }).eq('id', assistantId).select('id');
+    var updateRes = await supabaseClient.from('assistants').update({ role: 'mid_admin' }).eq('id', assistantId).select('id');
     if (updateRes.error) { errBox.textContent = '승격 실패: ' + updateRes.error.message; errBox.classList.add('show'); return; }
     if (!updateRes.data || !updateRes.data.length) { errBox.textContent = '승격이 적용되지 않았습니다 (권한 문제일 수 있어요).'; errBox.classList.add('show'); return; }
 
@@ -716,7 +883,7 @@
   document.getElementById('deleteManagerConfirmBtn').addEventListener('click', async function () {
     if (!pendingDeleteManagerId) return;
     await supabaseClient.from('rooms').update({ manager_id: null }).eq('manager_id', pendingDeleteManagerId);
-    var res = await supabaseClient.from('assistants').update({ role: 'assistant', building_id: null }).eq('id', pendingDeleteManagerId);
+    var res = await supabaseClient.from('assistants').update({ role: 'assistant' }).eq('id', pendingDeleteManagerId);
     deleteManagerModalOverlay.classList.remove('show');
     if (res.error) { alert('해제 실패: ' + res.error.message); return; }
     pendingDeleteManagerId = null;
@@ -822,7 +989,7 @@
   });
 
   /* ---------- 모달 바깥 클릭시 닫기 ---------- */
-  [addRoomModalOverlay, deleteRoomModalOverlay, addManagerModalOverlay, editPermModalOverlay,
+  [addBuildingModalOverlay, addRoomModalOverlay, deleteRoomModalOverlay, addManagerModalOverlay, editPermModalOverlay,
    deleteManagerModalOverlay, addSemesterModalOverlay, deleteSemesterModalOverlay].forEach(function (ov) {
     ov.addEventListener('click', function (e) { if (e.target === ov) ov.classList.remove('show'); });
   });
