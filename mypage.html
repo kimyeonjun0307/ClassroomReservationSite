@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <title>마이페이지 · 동서대학교 공간 예약 시스템</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root {
     --primary: #B91C1C; --primary-dark: #7F1010; --primary-light: #D64545;
@@ -88,6 +89,52 @@
   .cell-canceled { color: var(--gray-300); font-size: 13px; }
   .cell-dash { color: var(--gray-300); }
 
+  .action-cell { display: flex; flex-direction: column; gap: 6px; align-items: center; }
+  .btn-rebook {
+    background: #fff; border: 1.5px solid var(--primary-light); color: var(--primary);
+    font-size: 12px; font-weight: 700; padding: 7px 14px; border-radius: 8px; cursor: pointer; transition: background .12s;
+  }
+  .btn-rebook:hover { background: var(--accent-bg); }
+
+  /* 재예약 모달 */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(90,15,15,.5);
+    align-items: center; justify-content: center; z-index: 50; padding: 20px;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal-box { background: #fff; border-radius: var(--radius-md); padding: 24px; width: 360px; max-width: 100%; box-shadow: 0 20px 50px rgba(90,15,15,0.28); }
+  .modal-title { font-size: 15.5px; font-weight: 700; color: var(--gray-900); margin-bottom: 6px; }
+  .modal-desc { font-size: 12.5px; color: var(--gray-500); line-height: 1.6; margin-bottom: 16px; }
+  .modal-field { margin-bottom: 14px; }
+  .modal-field label { display: block; font-size: 12.5px; font-weight: 600; color: var(--gray-700); margin-bottom: 6px; }
+  .modal-field input[type="date"], .modal-field input[type="text"] {
+    width: 100%; height: 38px; border: 1.5px solid var(--gray-200); border-radius: 8px; padding: 0 12px;
+    font-size: 13px; font-family: inherit; background: var(--gray-50); color: var(--gray-900);
+  }
+  .modal-field input:focus { outline: none; border-color: var(--primary-light); background: #fff; }
+  .modal-time-row { display: flex; gap: 8px; }
+  .modal-time-row select {
+    flex: 1; height: 38px; border: 1.5px solid var(--gray-200); border-radius: 8px; padding: 0 10px;
+    font-size: 13px; font-family: inherit; background: var(--gray-50); color: var(--gray-900);
+  }
+  .modal-time-row select:focus { outline: none; border-color: var(--primary-light); background: #fff; }
+  .modal-error-box {
+    display: none; background: var(--danger-bg); color: var(--danger); border: 1px solid var(--danger-border);
+    border-radius: 8px; padding: 9px 12px; font-size: 12.5px; margin-bottom: 14px; line-height: 1.6; white-space: pre-line;
+  }
+  .modal-actions { display: flex; gap: 8px; }
+  .modal-btn-cancel, .modal-btn-confirm { flex: 1; height: 42px; border-radius: 8px; font-size: 13.5px; font-weight: 700; cursor: pointer; border: none; transition: background .12s; }
+  .modal-btn-cancel { background: #fff; border: 1.5px solid var(--gray-200); color: var(--gray-700); }
+  .modal-btn-cancel:hover { background: var(--gray-50); }
+  .modal-btn-confirm { background: var(--primary); color: #fff; }
+  .modal-btn-confirm:hover { background: var(--primary-dark); }
+  .modal-btn-confirm:disabled { background: var(--gray-300); cursor: not-allowed; }
+
+  .page-message-box {
+    display: none; margin-bottom: 20px; padding: 12px 16px; border-radius: var(--radius-md);
+    font-size: 13px; line-height: 1.5; white-space: pre-line;
+  }
+
   .logo { cursor: pointer; }
 
   .card { cursor: pointer; border: 2px solid transparent; transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease; }
@@ -129,27 +176,6 @@
   }
   .profile-edit-btn:hover { background: var(--gray-50); border-color: var(--primary-light); }
 
-  .modal-overlay {
-    display: none; position: fixed; inset: 0; background: rgba(90,15,15,.5);
-    align-items: center; justify-content: center; z-index: 50; padding: 20px;
-  }
-  .modal-overlay.show { display: flex; }
-  .modal-box { background: #fff; border-radius: var(--radius-lg); padding: 26px; width: 380px; max-width: 100%; box-shadow: var(--shadow-md); }
-  .modal-title { font-size: 16px; font-weight: 700; color: var(--gray-900); margin-bottom: 6px; }
-  .modal-desc { font-size: 12.5px; color: var(--gray-500); line-height: 1.6; margin-bottom: 18px; }
-  .modal-field { margin-bottom: 14px; }
-  .modal-field label { display: block; font-size: 12.5px; font-weight: 700; color: var(--gray-700); margin-bottom: 7px; }
-  .modal-field input {
-    width: 100%; height: 40px; border: 1.5px solid var(--gray-200); border-radius: 10px;
-    padding: 0 12px; font-size: 13px; font-family: inherit; background: var(--gray-50); color: var(--gray-900);
-  }
-  .modal-field input:focus { outline: none; border-color: var(--primary-light); background: #fff; }
-  .modal-actions { display: flex; gap: 8px; margin-top: 20px; }
-  .modal-btn-cancel, .modal-btn-confirm { flex: 1; height: 42px; border-radius: 10px; font-size: 13.5px; font-weight: 700; cursor: pointer; border: none; }
-  .modal-btn-cancel { background: #fff; border: 1.5px solid var(--gray-200); color: var(--gray-700); }
-  .modal-btn-confirm { background: var(--primary); color: #fff; }
-  .modal-error { color: var(--danger); font-size: 12px; margin-top: -6px; margin-bottom: 10px; display: none; }
-  .modal-error.show { display: block; }
 </style>
 </head>
 <body>
@@ -157,9 +183,9 @@
 <header>
   <div class="logo" onclick="mainback()">🏫 동서대학교 강의실 예약</div>
   <div class="user-info">
-    <span id="headerUserLabel">👤 -</span>
+    <span id="headerUserInfo">👤 -</span>
     <span class="divider">|</span>
-    <span class="logout" id="logoutBtn">로그아웃</span>
+    <span class="logout" onclick="logout()">로그아웃</span>
   </div>
 </header>
 
@@ -172,15 +198,27 @@
       <div class="profile-name-row">
         <span class="profile-name" id="profileName">-</span>
       </div>
-      <div class="profile-dept" id="profileJoined">-</div>
+      <div class="profile-dept" id="profileDept">-</div>
       <div class="profile-details">
         <div class="detail-item">
           <span class="detail-label">이메일</span>
           <span class="detail-value" id="profileEmail">-</span>
         </div>
+        <div class="detail-item">
+          <span class="detail-label">연락처</span>
+          <span class="detail-value" id="profilePhone">-</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">소속</span>
+          <span class="detail-value" id="profileDept2">-</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">역할</span>
+          <span class="detail-value" id="profileRole">-</span>
+        </div>
       </div>
     </div>
-    <button type="button" class="profile-edit-btn" id="openEditProfileBtn">회원정보 수정</button>
+    <button class="profile-edit-btn" onclick="alert('회원정보 수정 기능은 아직 준비 중입니다.')">회원정보 수정</button>
   </div>
 
   <div class="summary-cards">
@@ -219,52 +257,68 @@
     <button onclick="showAll()">전체 보기</button>
   </div>
 
+  <div class="page-message-box" id="pageMessageBox"></div>
+
   <table>
     <thead>
       <tr>
-        <th>신청일자</th>
         <th>예약 공간</th>
         <th>이용 일시</th>
         <th>대여 목적</th>
         <th>상태</th>
         <th>관리자 메모 / 거절 사유</th>
         <th>예약 취소</th>
+        <th>재예약</th>
       </tr>
     </thead>
-    <tbody id="bookingsTbody">
-    </tbody>
+    <tbody id="bookingTbody"></tbody>
   </table>
 </main>
 
-<!-- 회원정보 수정 모달 -->
-<div class="modal-overlay" id="editProfileModalOverlay">
+<!-- 재예약 확인 모달 -->
+<div class="modal-overlay" id="rebookModalOverlay">
   <div class="modal-box">
-    <div class="modal-title">회원정보 수정</div>
-    <div class="modal-desc">이름을 바꾸거나, 비밀번호를 새로 설정할 수 있습니다. 비밀번호는 바꾸고 싶을 때만 입력하세요.</div>
+    <div class="modal-title">같은 강의실로 재예약</div>
+    <div class="modal-desc" id="rebookModalDesc"></div>
     <div class="modal-field">
-      <label>이름</label>
-      <input type="text" id="epName" placeholder="이름">
+      <label>예약 날짜</label>
+      <input type="date" id="rebookDateInput">
     </div>
     <div class="modal-field">
-      <label>새 비밀번호 (선택)</label>
-      <input type="password" id="epNewPassword" placeholder="6자 이상, 바꾸지 않으려면 비워두세요">
+      <label>이용 시간</label>
+      <div class="modal-time-row">
+        <select id="rebookStartTimeSelect"></select>
+        <select id="rebookEndTimeSelect"></select>
+      </div>
     </div>
-    <div class="modal-error" id="epErrorBox"></div>
+    <div class="modal-field">
+      <label>대여 목적</label>
+      <input type="text" id="rebookPurposeInput" placeholder="대여 목적을 입력하세요">
+    </div>
+    <div class="modal-error-box" id="rebookErrorBox"></div>
     <div class="modal-actions">
-      <button type="button" class="modal-btn-cancel" id="epCancelBtn">취소</button>
-      <button type="button" class="modal-btn-confirm" id="epSaveBtn">저장</button>
+      <button type="button" class="modal-btn-cancel" id="rebookModalCancelBtn">취소</button>
+      <button type="button" class="modal-btn-confirm" id="rebookModalConfirmBtn">재예약 신청</button>
     </div>
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="assets/js/supabase-client.js"></script>
 <script>
-  var STATUS_LABEL = {
-    pending: '승인 대기', approved: '승인 완료', rejected: '승인 거절',
-    cancelled: '취소됨', done: '이용 완료'
-  };
-  var bookingsCache = [];
+  // TODO: login.html과 동일한 Supabase 프로젝트 정보로 교체
+  var SUPABASE_URL = 'https://yclrlgcixldovbhygjrc.supabase.co';
+  var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InljbHJsZ2NpeGxkb3ZiaHlnanJjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY2NzI2NTUsImV4cCI6MjEwMjI0ODY1NX0.hk2FB9D45QcGxFXPeNwNENcBusuOnLeakKNqA3gFtmo';
+  var supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  async function logout() {
+    await supabase.auth.signOut();
+    window.location.href = 'login.html';
+  }
+
+  var currentUser = null; // { id, name, role, department_id }
+  var MY_BOOKINGS = [];   // bookings row + room/building 조인
+
+  var STATUS_LABEL = { pending: '승인 대기', approved: '승인 완료', rejected: '승인 거절', cancelled: '취소됨', done: '이용 완료' };
+  var STATUS_CLASS = { pending: 'status-pending', approved: 'status-approved', rejected: 'status-rejected', cancelled: 'status-canceled', done: 'status-done' };
 
   var cards = {
     approved: document.getElementById('card-approved'),
@@ -274,163 +328,353 @@
   };
   var banner = document.getElementById('filterBanner');
   var bannerText = document.getElementById('filterBannerText');
+  var currentFilterStatus = '';
 
-  function clearActiveCards() { Object.keys(cards).forEach(function (k) { cards[k].classList.remove('active'); }); }
-
-  function filterByStatus(status, label) {
-    clearActiveCards();
-    cards[status].classList.add('active');
-    document.querySelectorAll('#bookingsTbody tr').forEach(function (row) {
-      row.classList.toggle('hidden-row', row.getAttribute('data-status') !== status);
-    });
-    updateEmptyRow();
-    banner.classList.add('show');
-    bannerText.textContent = '"' + label + '" 상태의 내역만 보고 있습니다.';
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+  function timeShort(t) { return String(t).slice(0, 5); }
+  var WEEKDAY_KOR = ['일', '월', '화', '수', '목', '금', '토'];
+  function formatBookingDate(dateStr) {
+    var d = new Date(dateStr + 'T00:00:00');
+    var dow = WEEKDAY_KOR[d.getDay()];
+    return dateStr + ' (' + dow + ')';
   }
-  window.filterByStatus = filterByStatus;
+  function dateToISO(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
 
-  function showAll() {
-    clearActiveCards();
-    document.querySelectorAll('#bookingsTbody tr').forEach(function (row) { row.classList.remove('hidden-row'); });
-    updateEmptyRow();
-    banner.classList.remove('show');
+  // class_schedules.weekday 규칙: 일=0, 월=1 ... 토=6 (JS Date.getDay()와 동일, index.html과 동일 규칙)
+  var CURRENT_SEMESTER = null;
+  var CURRENT_SEMESTER_ID = null;
+  async function loadCurrentSemester() {
+    var semRes = await supabase.from('semesters').select('id, start_date, end_date').eq('is_current', true).limit(1).maybeSingle();
+    CURRENT_SEMESTER = (!semRes.error && semRes.data) ? semRes.data : null;
+    CURRENT_SEMESTER_ID = CURRENT_SEMESTER ? CURRENT_SEMESTER.id : null;
   }
-  window.showAll = showAll;
 
-  function updateEmptyRow() {
-    var existing = document.getElementById('emptyRow');
-    if (existing) existing.remove();
-    var visible = Array.prototype.slice.call(document.querySelectorAll('#bookingsTbody tr:not(.hidden-row)'));
-    if (visible.length === 0) {
-      var tbody = document.getElementById('bookingsTbody');
-      var tr = document.createElement('tr');
-      tr.id = 'emptyRow';
-      tr.className = 'empty-row';
-      tr.innerHTML = '<td colspan="7">해당하는 내역이 없습니다.</td>';
-      tbody.appendChild(tr);
+  function showPageMessage(text, type) {
+    var box = document.getElementById('pageMessageBox');
+    box.textContent = text;
+    box.style.display = 'block';
+    if (type === 'error') {
+      box.style.background = 'var(--danger-bg)'; box.style.color = 'var(--danger)'; box.style.border = '1px solid var(--danger-border)';
+    } else {
+      box.style.background = 'var(--success-bg)'; box.style.color = 'var(--success)'; box.style.border = '1px solid var(--success-border)';
     }
+    clearTimeout(showPageMessage._t);
+    showPageMessage._t = setTimeout(function () { box.style.display = 'none'; }, 4500);
   }
 
-  function mainback() { window.location.href = 'index.html'; }
-  window.mainback = mainback;
+  async function requireSessionAndLoadUser() {
+    var sessionRes = await supabase.auth.getSession();
+    if (!sessionRes.data.session) { window.location.href = 'login.html'; return false; }
 
-  function escapeHtml(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-    });
+    var profileRes = await supabase.from('users').select('id, name, role, department_id, phone, departments(name)').eq('id', sessionRes.data.session.user.id).single();
+    if (profileRes.error || !profileRes.data) { window.location.href = 'login.html'; return false; }
+
+    currentUser = profileRes.data;
+    currentUser.email = sessionRes.data.session.user.email || '-';
+    currentUser.deptName = (profileRes.data.departments && profileRes.data.departments.name) || '-';
+    return true;
   }
 
-  function formatDateTime(iso) { return iso.slice(0, 10); }
+  var ROLE_LABEL = { assistant: '예약자(조교)', mid_admin: '중간관리자', final_admin: '최종관리자' };
 
-  async function loadBookings(userId) {
-    var res = await supabaseClient
+  function renderProfile() {
+    document.getElementById('headerUserInfo').textContent = '👤 ' + currentUser.name + ' (' + currentUser.deptName + ')';
+    document.getElementById('profileName').textContent = currentUser.name;
+    document.getElementById('profileDept').textContent = currentUser.deptName;
+    document.getElementById('profileDept2').textContent = currentUser.deptName;
+    document.getElementById('profileEmail').textContent = currentUser.email;
+    document.getElementById('profilePhone').textContent = currentUser.phone || '-';
+    document.getElementById('profileRole').textContent = ROLE_LABEL[currentUser.role] || currentUser.role;
+  }
+
+  async function loadMyBookings() {
+    var res = await supabase
       .from('bookings')
-      .select('id, date, start_time, end_time, purpose, status, review_comment, created_at, rooms(room_name)')
-      .eq('requester_id', userId)
-      .order('created_at', { ascending: false });
-    if (res.error) { alert('예약 목록을 불러오지 못했습니다: ' + res.error.message); return; }
-    bookingsCache = res.data || [];
-    renderBookings();
+      .select('*, rooms(room_no, buildings!building_id(name))')
+      .eq('requester_id', currentUser.id)
+      .order('booking_date', { ascending: false });
+    MY_BOOKINGS = (!res.error && res.data) ? res.data : [];
   }
 
-  function renderBookings() {
-    var tbody = document.getElementById('bookingsTbody');
-    tbody.innerHTML = '';
+  function renderSummaryCounts() {
     var counts = { approved: 0, pending: 0, rejected: 0, done: 0 };
-
-    bookingsCache.forEach(function (b) {
-      if (counts[b.status] !== undefined) counts[b.status]++;
-
-      var tr = document.createElement('tr');
-      tr.setAttribute('data-status', b.status);
-      tr.setAttribute('data-booking-id', b.id);
-
-      var canCancel = (b.status === 'pending' || b.status === 'approved');
-      var actionHtml = canCancel
-        ? '<button type="button" class="btn-cancel" data-cancel-id="' + b.id + '">예약 취소</button>'
-        : (b.status === 'cancelled' ? '<span class="cell-canceled">취소 완료</span>' : '<span class="cell-dash">-</span>');
-
-      tr.innerHTML =
-        '<td>' + formatDateTime(b.created_at) + '</td>' +
-        '<td class="space-name">' + escapeHtml(b.rooms ? b.rooms.room_name : '-') + '</td>' +
-        '<td>' + b.date + '<br>' + b.start_time.slice(0, 5) + '~' + b.end_time.slice(0, 5) + '</td>' +
-        '<td>' + escapeHtml(b.purpose) + '</td>' +
-        '<td><span class="status status-' + b.status + '">' + STATUS_LABEL[b.status] + '</span></td>' +
-        '<td class="reason">' + (b.review_comment ? escapeHtml(b.review_comment) : '<span class="cell-dash">-</span>') + '</td>' +
-        '<td>' + actionHtml + '</td>';
-      tbody.appendChild(tr);
-    });
-
+    MY_BOOKINGS.forEach(function (b) { if (counts.hasOwnProperty(b.status)) counts[b.status]++; });
     document.getElementById('count-approved').textContent = counts.approved + '건';
     document.getElementById('count-pending').textContent = counts.pending + '건';
     document.getElementById('count-rejected').textContent = counts.rejected + '건';
     document.getElementById('count-done').textContent = counts.done + '건';
-
-    if (!document.querySelector('.card.active')) updateEmptyRow();
   }
 
-  document.getElementById('bookingsTbody').addEventListener('click', async function (e) {
-    var btn = e.target.closest('[data-cancel-id]');
-    if (!btn) return;
-    var bookingId = btn.getAttribute('data-cancel-id');
-    var row = btn.closest('tr');
-    var spaceName = row.querySelector('.space-name').textContent.trim();
-    var usage = row.cells[2].innerText.replace('\n', ' ');
+  function renderBookingTable() {
+    var tbody = document.getElementById('bookingTbody');
+    var list = currentFilterStatus ? MY_BOOKINGS.filter(function (b) { return b.status === currentFilterStatus; }) : MY_BOOKINGS;
+
+    if (!list.length) {
+      tbody.innerHTML = '<tr class="empty-row"><td colspan="7">해당하는 내역이 없습니다.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = list.map(function (b) {
+      var spaceName = b.rooms ? ((b.rooms.buildings ? b.rooms.buildings.name + ' ' : '') + b.rooms.room_no + '호') : '-';
+      var usage = formatBookingDate(b.booking_date) + '<br>' + timeShort(b.start_time) + '~' + timeShort(b.end_time);
+      var statusHtml = '<span class="status ' + (STATUS_CLASS[b.status] || '') + '">' + (STATUS_LABEL[b.status] || b.status) + '</span>';
+      var reasonHtml = b.reject_reason ? '<span class="warn">⚠ ' + b.reject_reason + '</span>' : '-';
+      var actionHtml = (b.status === 'pending' || b.status === 'approved')
+        ? '<button type="button" class="btn-cancel" data-cancel-id="' + b.id + '">예약 취소</button>'
+        : '<span class="cell-dash">-</span>';
+
+      var rebookHtml = b.room_id
+        ? '<button type="button" class="btn-rebook" data-rebook-id="' + b.id + '">재예약</button>'
+        : '<span class="cell-dash">-</span>';
+
+      return '<tr data-status="' + b.status + '" data-booking-id="' + b.id + '">' +
+        '<td class="space-name">' + spaceName + '</td>' +
+        '<td>' + usage + '</td>' +
+        '<td>' + (b.purpose || '-') + '</td>' +
+        '<td>' + statusHtml + '</td>' +
+        '<td class="reason">' + reasonHtml + '</td>' +
+        '<td>' + actionHtml + '</td>' +
+        '<td>' + rebookHtml + '</td>' +
+        '</tr>';
+    }).join('');
+
+    tbody.querySelectorAll('[data-cancel-id]').forEach(function (btn) {
+      btn.addEventListener('click', function () { cancelReservation(parseInt(btn.getAttribute('data-cancel-id'), 10)); });
+    });
+    tbody.querySelectorAll('[data-rebook-id]').forEach(function (btn) {
+      btn.addEventListener('click', function () { openRebookModal(parseInt(btn.getAttribute('data-rebook-id'), 10)); });
+    });
+  }
+
+  function clearActiveCards() {
+    Object.keys(cards).forEach(function (k) { cards[k].classList.remove('active'); });
+  }
+
+  function filterByStatus(status, label) {
+    clearActiveCards();
+    cards[status].classList.add('active');
+    currentFilterStatus = status;
+    renderBookingTable();
+    banner.classList.add('show');
+    bannerText.textContent = '"' + label + '" 상태의 내역만 보고 있습니다.';
+  }
+
+  function showAll() {
+    clearActiveCards();
+    currentFilterStatus = '';
+    renderBookingTable();
+    banner.classList.remove('show');
+  }
+
+  async function cancelReservation(bookingId) {
+    var b = MY_BOOKINGS.filter(function (x) { return x.id === bookingId; })[0];
+    if (!b || (b.status !== 'pending' && b.status !== 'approved')) return;
+
+    var spaceName = b.rooms ? ((b.rooms.buildings ? b.rooms.buildings.name + ' ' : '') + b.rooms.room_no + '호') : '이 강의실';
+    var usage = formatBookingDate(b.booking_date).replace(/<br>/g, ' ') + ' ' + timeShort(b.start_time) + '~' + timeShort(b.end_time);
     var ok = confirm('"' + spaceName + '" (' + usage + ') 예약을 취소하시겠습니까?\n취소한 예약은 되돌릴 수 없습니다.');
     if (!ok) return;
 
-    var res = await supabaseClient.from('bookings').update({ status: 'cancelled' }).eq('id', bookingId);
+    // 본인이 신청한 예약을 본인이 취소하는 것이므로(관리자 거절이 아님) 이력 남길 필요 없이 바로 삭제
+    var res = await supabase.from('bookings').delete().eq('id', bookingId);
     if (res.error) { alert('취소에 실패했습니다: ' + res.error.message); return; }
 
-    var auth = await requireSession();
-    if (auth) await loadBookings(auth.session.user.id);
+    MY_BOOKINGS = MY_BOOKINGS.filter(function (x) { return x.id !== bookingId; });
+    renderSummaryCounts();
+    renderBookingTable();
+  }
+
+  /* ---------- 재예약 (이전 예약과 같은 강의실로, 날짜·시간을 자유롭게 선택해 새로 신청) ---------- */
+  var rebookModalOverlay = document.getElementById('rebookModalOverlay');
+  var rebookDateInput = document.getElementById('rebookDateInput');
+  var rebookStartTimeSelect = document.getElementById('rebookStartTimeSelect');
+  var rebookEndTimeSelect = document.getElementById('rebookEndTimeSelect');
+  var rebookPurposeInput = document.getElementById('rebookPurposeInput');
+  var rebookErrorBox = document.getElementById('rebookErrorBox');
+  var rebookConfirmBtn = document.getElementById('rebookModalConfirmBtn');
+  var rebookTarget = null; // { roomId, spaceName, headcount }
+
+  // 이용 시간 선택 옵션 채우기 (09:00~19:00, 1시간 단위 - index.html의 예약 가능 시간대와 동일)
+  (function fillRebookTimeOptions() {
+    var startHtml = '', endHtml = '';
+    for (var h = 9; h <= 19; h++) {
+      var label = pad2(h) + ':00';
+      startHtml += '<option value="' + h + '">' + label + '</option>';
+      endHtml += '<option value="' + h + '">' + label + '</option>';
+    }
+    rebookStartTimeSelect.innerHTML = startHtml;
+    rebookEndTimeSelect.innerHTML = endHtml;
+  })();
+
+  function hourToTimeStr(h) { return pad2(h) + ':00:00'; }
+
+  function nextDateForWeekday(weekday) {
+    // 오늘(포함) 이후 날짜 중 원래 예약과 같은 요일이 처음 오는 날짜를 기본값으로 제안
+    var d = new Date();
+    d.setHours(0, 0, 0, 0);
+    var diff = (weekday - d.getDay() + 7) % 7;
+    d.setDate(d.getDate() + diff);
+    return d;
+  }
+
+  function hideRebookError() {
+    rebookErrorBox.style.display = 'none';
+    rebookErrorBox.textContent = '';
+  }
+
+  function showRebookError(text) {
+    rebookErrorBox.textContent = text;
+    rebookErrorBox.style.display = 'block';
+  }
+
+  function openRebookModal(bookingId) {
+    var b = MY_BOOKINGS.filter(function (x) { return x.id === bookingId; })[0];
+    if (!b || !b.room_id) return;
+
+    var spaceName = b.rooms ? ((b.rooms.buildings ? b.rooms.buildings.name + ' ' : '') + b.rooms.room_no + '호') : '해당 강의실';
+    var origDow = new Date(b.booking_date + 'T00:00:00').getDay();
+    var startHour = parseInt(b.start_time, 10);
+    var endHour = parseInt(b.end_time, 10);
+
+    rebookTarget = {
+      roomId: b.room_id,
+      spaceName: spaceName,
+      headcount: b.headcount || null
+    };
+
+    document.getElementById('rebookModalDesc').innerHTML =
+      '<b>' + spaceName + '</b><br>날짜와 시간을 자유롭게 선택해 재예약을 신청할 수 있습니다. (기본값: 이전과 같은 시간)';
+
+    // 기본값: 날짜는 이전 예약과 같은 요일의 다음 날짜, 시간은 이전 예약과 동일한 시간
+    var defaultDate = nextDateForWeekday(origDow);
+    rebookDateInput.value = dateToISO(defaultDate);
+    rebookDateInput.min = dateToISO(new Date());
+    rebookStartTimeSelect.value = String(startHour);
+    rebookEndTimeSelect.value = String(endHour);
+    rebookPurposeInput.value = b.purpose || '';
+    hideRebookError();
+    rebookModalOverlay.classList.add('show');
+  }
+
+  document.getElementById('rebookModalCancelBtn').addEventListener('click', function () {
+    rebookModalOverlay.classList.remove('show');
+    rebookTarget = null;
   });
 
-  var CURRENT_PROFILE = null;
+  // 선택한 날짜·시간에 겹치는 정규 수업/기존 예약을 모두 찾아서 반환 (충돌이 없으면 빈 배열)
+  async function findRebookConflicts(roomId, dateStr, startTime, endTime, weekday) {
+    var conflicts = [];
 
-  /* ---------- 회원정보 수정 ---------- */
-  var editProfileModalOverlay = document.getElementById('editProfileModalOverlay');
-  document.getElementById('openEditProfileBtn').addEventListener('click', function () {
-    document.getElementById('epName').value = CURRENT_PROFILE ? CURRENT_PROFILE.name : '';
-    document.getElementById('epNewPassword').value = '';
-    document.getElementById('epErrorBox').classList.remove('show');
-    editProfileModalOverlay.classList.add('show');
-  });
-  document.getElementById('epCancelBtn').addEventListener('click', function () { editProfileModalOverlay.classList.remove('show'); });
-  editProfileModalOverlay.addEventListener('click', function (e) { if (e.target === editProfileModalOverlay) editProfileModalOverlay.classList.remove('show'); });
-
-  document.getElementById('epSaveBtn').addEventListener('click', async function () {
-    var errBox = document.getElementById('epErrorBox');
-    var name = document.getElementById('epName').value.trim();
-    var newPassword = document.getElementById('epNewPassword').value;
-
-    if (!name) { errBox.textContent = '이름을 입력해주세요.'; errBox.classList.add('show'); return; }
-    if (newPassword && newPassword.length < 6) { errBox.textContent = '비밀번호는 6자 이상이어야 합니다.'; errBox.classList.add('show'); return; }
-
-    var nameRes = await supabaseClient.from('assistants').update({ name: name }).eq('id', CURRENT_PROFILE.id);
-    if (nameRes.error) { errBox.textContent = '이름 저장 실패: ' + nameRes.error.message; errBox.classList.add('show'); return; }
-
-    if (newPassword) {
-      var pwRes = await supabaseClient.auth.updateUser({ password: newPassword });
-      if (pwRes.error) { errBox.textContent = '비밀번호 변경 실패: ' + pwRes.error.message; errBox.classList.add('show'); return; }
+    // 1) 정규 수업(class_schedules)과 겹치는지 확인 (학기 기간 내인 경우만)
+    if (CURRENT_SEMESTER_ID != null && CURRENT_SEMESTER &&
+        !(CURRENT_SEMESTER.start_date > dateStr || CURRENT_SEMESTER.end_date < dateStr)) {
+      var csRes = await supabase.from('class_schedules')
+        .select('start_time, end_time, professor_name, subject_name')
+        .eq('room_id', roomId).eq('weekday', weekday).eq('semester_id', CURRENT_SEMESTER_ID);
+      if (!csRes.error && csRes.data) {
+        csRes.data.forEach(function (cs) {
+          if (startTime < cs.end_time && endTime > cs.start_time) {
+            conflicts.push({
+              start: cs.start_time, end: cs.end_time,
+              label: '정규 수업 · ' + (cs.professor_name || '담당교수 미정') + (cs.subject_name ? (' (' + cs.subject_name + ')') : '')
+            });
+          }
+        });
+      }
     }
 
-    CURRENT_PROFILE.name = name;
-    document.getElementById('profileName').textContent = name;
-    editProfileModalOverlay.classList.remove('show');
-    alert('회원정보가 수정되었습니다.');
+    // 2) 이미 승인/대기 중인 다른 예약과 겹치는지 확인
+    var bkRes = await supabase.from('bookings')
+      .select('start_time, end_time, status')
+      .eq('room_id', roomId).eq('booking_date', dateStr).in('status', ['pending', 'approved']);
+    if (!bkRes.error && bkRes.data) {
+      bkRes.data.forEach(function (bk) {
+        if (startTime < bk.end_time && endTime > bk.start_time) {
+          conflicts.push({
+            start: bk.start_time, end: bk.end_time,
+            label: (STATUS_LABEL[bk.status] || bk.status) + ' 상태의 다른 예약'
+          });
+        }
+      });
+    }
+
+    return conflicts;
+  }
+
+  function formatConflictList(conflicts) {
+    return conflicts.map(function (c) {
+      return '· ' + timeShort(c.start) + '~' + timeShort(c.end) + ' — ' + c.label;
+    }).join('\n');
+  }
+
+  rebookConfirmBtn.addEventListener('click', async function () {
+    if (!rebookTarget) { rebookModalOverlay.classList.remove('show'); return; }
+    hideRebookError();
+
+    var dateStr = rebookDateInput.value;
+    if (!dateStr) { showRebookError('예약 날짜를 선택해주세요.'); return; }
+    var todayStr = dateToISO(new Date());
+    if (dateStr < todayStr) { showRebookError('오늘 이후의 날짜만 선택할 수 있습니다.'); return; }
+
+    var startVal = rebookStartTimeSelect.value;
+    var endVal = rebookEndTimeSelect.value;
+    if (!startVal || !endVal) { showRebookError('이용 시작·종료 시간을 선택해주세요.'); return; }
+    var startHour = parseInt(startVal, 10);
+    var endHour = parseInt(endVal, 10);
+    if (startHour >= endHour) { showRebookError('종료 시간은 시작 시간보다 이후여야 합니다.'); return; }
+
+    var startTime = hourToTimeStr(startHour);
+    var endTime = hourToTimeStr(endHour);
+    var dow = new Date(dateStr + 'T00:00:00').getDay();
+
+    rebookConfirmBtn.disabled = true;
+    rebookConfirmBtn.textContent = '확인 중...';
+
+    var conflicts = await findRebookConflicts(rebookTarget.roomId, dateStr, startTime, endTime, dow);
+
+    rebookConfirmBtn.disabled = false;
+    rebookConfirmBtn.textContent = '재예약 신청';
+
+    if (conflicts.length) {
+      showRebookError('선택하신 시간에 다음 예약이 있어 신청할 수 없습니다.\n' + formatConflictList(conflicts));
+      return;
+    }
+
+    var purpose = rebookPurposeInput.value.trim();
+    var insertRes = await supabase.from('bookings').insert([{
+      room_id: rebookTarget.roomId,
+      booking_date: dateStr,
+      start_time: startTime,
+      end_time: endTime,
+      purpose: purpose || null,
+      headcount: rebookTarget.headcount,
+      requester_id: currentUser.id,
+      status: 'pending'
+    }]);
+
+    if (insertRes.error) { showRebookError('재예약 신청에 실패했습니다: ' + insertRes.error.message); return; }
+
+    rebookModalOverlay.classList.remove('show');
+    var doneSpaceName = rebookTarget.spaceName;
+    rebookTarget = null;
+
+    await loadMyBookings();
+    renderSummaryCounts();
+    renderBookingTable();
+    showPageMessage(doneSpaceName + ' 예약이 재신청되었습니다. 담당 중간관리자 승인 후 확정됩니다.', 'success');
   });
 
+  function mainback() {
+    window.location.href = "index.html";
+  }
+
   (async function init() {
-    var auth = await requireRole(['assistant']);
-    if (!auth) return;
-    CURRENT_PROFILE = auth.profile;
-    document.getElementById('headerUserLabel').textContent = '👤 ' + auth.profile.name;
-    document.getElementById('profileName').textContent = auth.profile.name;
-    document.getElementById('profileEmail').textContent = auth.session.user.email;
-    document.getElementById('profileJoined').textContent = '가입일 ' + formatDateTime(auth.profile.created_at);
-    document.getElementById('logoutBtn').addEventListener('click', signOutAndRedirect);
-    await loadBookings(auth.session.user.id);
+    var ok = await requireSessionAndLoadUser();
+    if (!ok) return;
+    renderProfile();
+    await Promise.all([loadMyBookings(), loadCurrentSemester()]);
+    renderSummaryCounts();
+    renderBookingTable();
   })();
 </script>
 

@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>로그인 · 동서대학교 공간 예약 시스템</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root {
     --primary: #B91C1C;
@@ -59,11 +60,6 @@
   .brand-name { font-size: 13px; font-weight: 600; letter-spacing: 1.2px; color: rgba(255,255,255,0.75); }
 
   .visual-headline { position: relative; z-index: 1; margin-top: 40px; }
-  .visual-headline .eyebrow {
-    display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600;
-    color: rgba(255,255,255,0.85); background: rgba(255,255,255,0.14); padding: 6px 12px;
-    border-radius: 100px; margin-bottom: 18px;
-  }
   .visual-headline h1 { font-size: 38px; line-height: 1.32; font-weight: 700; margin: 0 0 16px; letter-spacing: -0.6px; text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 4px 18px rgba(0,0,0,0.7); }
   .visual-headline p { font-size: 15px; color: rgba(255,255,255,0.92); line-height: 1.75; max-width: 400px; margin: 0; text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 3px 14px rgba(0,0,0,0.6); }
 
@@ -78,7 +74,7 @@
 
   .visual-bottom { position: relative; z-index: 1; font-size: 12px; color: rgba(255,255,255,0.5); }
 
-  /* ---------------- 우측 로그인 폼 ---------------- */
+  /* ---------------- 우측 로그인/회원가입 폼 ---------------- */
   .form-side { display: flex; align-items: center; justify-content: center; padding: 40px 32px; background: #fff; }
   .login-card { width: 100%; max-width: 340px; }
 
@@ -88,17 +84,17 @@
 
   .field { margin-bottom: 14px; }
   .field label { display: block; font-size: 12.5px; font-weight: 600; color: var(--gray-700); margin-bottom: 7px; }
-  .field input {
+  .field input, .field select {
     width: 100%; height: 44px; border: 1.5px solid var(--gray-200); border-radius: var(--radius-sm);
     padding: 0 14px; font-size: 14px; font-family: inherit; background: var(--gray-50); color: var(--gray-900);
     transition: border-color .12s, background .12s;
   }
-  .field input:focus { outline: none; border-color: var(--primary-light); background: #fff; }
+  .field input:focus, .field select:focus { outline: none; border-color: var(--primary-light); background: #fff; }
 
   .row-between { display: flex; align-items: center; justify-content: space-between; margin: 2px 0 22px; }
   .remember { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--gray-500); }
   .remember input { width: 15px; height: 15px; accent-color: var(--primary); }
-  .link-muted { font-size: 12.5px; color: var(--gray-500); text-decoration: none; }
+  .link-muted { font-size: 12.5px; color: var(--gray-500); text-decoration: none; background: none; border: none; cursor: pointer; padding: 0; font-family: inherit; }
   .link-muted:hover { color: var(--primary); }
 
   .btn-login {
@@ -108,38 +104,23 @@
   }
   .btn-login:hover { background: var(--primary-dark); }
   .btn-login:active { transform: scale(0.99); }
+  .btn-login:disabled { opacity: 0.6; cursor: not-allowed; }
 
   .divider { display: flex; align-items: center; gap: 10px; margin: 22px 0 16px; font-size: 11px; color: var(--gray-300); }
   .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--gray-200); }
 
   .quick-links { display: flex; justify-content: center; gap: 14px; font-size: 12.5px; }
-  .quick-links a { color: var(--gray-500); text-decoration: none; }
-  .quick-links a:hover { color: var(--primary); }
+  .quick-links a, .quick-links button { color: var(--gray-500); text-decoration: none; }
+  .quick-links a:hover, .quick-links button:hover { color: var(--primary); }
   .quick-links .sep { color: var(--gray-200); }
 
   .foot-note { margin-top: 30px; font-size: 11px; color: var(--gray-300); text-align: center; line-height: 1.7; }
 
-  /* 회원가입 모달 */
-  .modal-overlay {
-    display: none; position: fixed; inset: 0; background: rgba(90,15,15,.5);
-    align-items: center; justify-content: center; z-index: 50; padding: 20px;
-  }
-  .modal-overlay.show { display: flex; }
-  .modal-box { background: #fff; border-radius: var(--radius-lg); padding: 26px; width: 380px; max-width: 100%; box-shadow: var(--shadow-lg); }
-  .modal-title { font-size: 16px; font-weight: 700; color: var(--gray-900); margin-bottom: 6px; }
-  .modal-desc { font-size: 12.5px; color: var(--gray-500); line-height: 1.6; margin-bottom: 18px; }
-  .modal-box .field select {
-    width: 100%; height: 44px; border: 1.5px solid var(--gray-200); border-radius: var(--radius-sm);
-    padding: 0 14px; font-size: 14px; font-family: inherit; background: var(--gray-50); color: var(--gray-900);
-  }
-  .field .field-hint { font-size: 11px; color: var(--gray-500); margin-top: 6px; display: none; }
-  .field .field-hint.show { display: block; }
-  .modal-actions { display: flex; gap: 8px; margin-top: 20px; }
-  .modal-btn-cancel, .modal-btn-confirm { flex: 1; height: 42px; border-radius: var(--radius-sm); font-size: 13.5px; font-weight: 700; cursor: pointer; border: none; }
-  .modal-btn-cancel { background: #fff; border: 1.5px solid var(--gray-200); color: var(--gray-700); }
-  .modal-btn-confirm { background: var(--primary); color: #fff; }
-  .modal-error { color: var(--danger); font-size: 12px; margin-top: -6px; margin-bottom: 10px; display: none; }
-  .modal-error.show { display: block; }
+  .form-msg { font-size: 12.5px; margin: -6px 0 14px; line-height: 1.6; }
+  .form-msg.error { color: var(--danger); }
+  .form-msg.success { color: var(--success); }
+
+  .hidden { display: none !important; }
 </style>
 </head>
 <body>
@@ -180,19 +161,23 @@
   </div>
 
   <div class="form-side">
-    <div class="login-card">
+
+    <!-- ============ 로그인 폼 ============ -->
+    <div class="login-card" id="loginCard">
       <div class="kicker">SPACE RESERVATION</div>
       <h2>로그인</h2>
-      <p class="sub">가입하신 이메일과 비밀번호로 로그인해주세요. 예약자/중간관리자/최종관리자 화면은 계정 권한에 따라 자동으로 연결됩니다.</p>
+      <p class="sub">조교 계정으로 로그인해주세요. 역할(조교/중간관리자/최종관리자)은 로그인 후 자동으로 인식됩니다.</p>
+
+      <div id="loginMsg" class="form-msg hidden"></div>
 
       <form id="loginForm">
         <div class="field">
-          <label for="userId">이메일</label>
-          <input type="text" id="userId" placeholder="이메일을 입력하세요" autocomplete="username">
+          <label for="loginEmail">이메일</label>
+          <input type="email" id="loginEmail" placeholder="이메일을 입력하세요" autocomplete="username" required>
         </div>
         <div class="field">
-          <label for="userPw">비밀번호</label>
-          <input type="password" id="userPw" placeholder="비밀번호를 입력하세요" autocomplete="current-password">
+          <label for="loginPw">비밀번호</label>
+          <input type="password" id="loginPw" placeholder="비밀번호를 입력하세요" autocomplete="current-password" required>
         </div>
 
         <div class="row-between">
@@ -207,177 +192,211 @@
 
       <div class="quick-links">
         <a href="#">아이디 찾기</a><span class="sep">|</span>
-        <a href="#" id="openSignupBtn">회원가입</a><span class="sep">|</span>
+        <button type="button" id="showSignup">회원가입</button><span class="sep">|</span>
         <a href="#">이용 안내</a>
       </div>
 
       <div class="foot-note">개인정보처리방침</div>
     </div>
+
+    <!-- ============ 회원가입 폼 ============ -->
+    <div class="login-card hidden" id="signupCard">
+      <div class="kicker">SPACE RESERVATION</div>
+      <h2>회원가입</h2>
+      <p class="sub">조교 계정으로 가입합니다. 역할을 직접 선택해주세요.</p>
+
+      <div id="signupMsg" class="form-msg hidden"></div>
+
+      <form id="signupForm">
+        <div class="field">
+          <label for="signupName">이름</label>
+          <input type="text" id="signupName" placeholder="이름을 입력하세요" required>
+        </div>
+        <div class="field">
+          <label for="signupEmail">이메일</label>
+          <input type="email" id="signupEmail" placeholder="이메일을 입력하세요" autocomplete="username" required>
+        </div>
+        <div class="field">
+          <label for="signupPw">비밀번호</label>
+          <input type="password" id="signupPw" placeholder="6자 이상 입력하세요" autocomplete="new-password" minlength="6" required>
+        </div>
+        <div class="field">
+          <label for="signupDept">소속부서</label>
+          <select id="signupDept"><option value="">선택해주세요</option></select>
+        </div>
+        <p class="sub" style="margin: -4px 0 14px;">가입 후에는 예약자(조교) 권한으로 시작합니다. 중간관리자/최종관리자 권한은 최종관리자가 별도로 부여합니다.</p>
+
+        <button type="submit" class="btn-login" id="btnSignup">회원가입</button>
+      </form>
+
+      <div class="divider">또는</div>
+
+      <div class="quick-links">
+        <button type="button" id="showLogin">로그인으로 돌아가기</button>
+      </div>
+    </div>
+
   </div>
 
 </div>
 
-<!-- 회원가입 모달 -->
-<div class="modal-overlay" id="signupModalOverlay">
-  <div class="modal-box">
-    <div class="modal-title">회원가입</div>
-    <div class="modal-desc">이메일/비밀번호는 필수, 나머지는 생략 가능합니다. 중간관리자·최종관리자를 선택하면 바로 권한이 생기는 게 아니라 신청 상태가 되고, 최종관리자가 승인해야 실제로 권한이 부여됩니다.</div>
-
-    <div class="field">
-      <label for="suName">이름 <span style="color:var(--gray-300); font-weight:400;">(선택)</span></label>
-      <input type="text" id="suName" placeholder="이름을 입력하세요 (비워두면 이메일로 표시)">
-    </div>
-    <div class="field">
-      <label for="suEmail">이메일</label>
-      <input type="text" id="suEmail" placeholder="이메일을 입력하세요" autocomplete="username">
-    </div>
-    <div class="field">
-      <label for="suPassword">비밀번호</label>
-      <input type="password" id="suPassword" placeholder="6자 이상" autocomplete="new-password">
-    </div>
-    <div class="field">
-      <label for="suRole">가입 유형</label>
-      <select id="suRole">
-        <option value="assistant">예약자</option>
-        <option value="mid_admin">중간관리자 (승인 필요)</option>
-        <option value="final_admin">최종관리자 (승인 필요)</option>
-      </select>
-      <div class="field-hint" id="suRoleHint">가입 신청 후 최종관리자가 승인하면 권한이 부여됩니다. 승인 전까지는 예약자로 이용하실 수 있어요.</div>
-    </div>
-    <div class="modal-error" id="suErrorBox"></div>
-
-    <div class="modal-actions">
-      <button type="button" class="modal-btn-cancel" id="suCancelBtn">취소</button>
-      <button type="button" class="modal-btn-confirm" id="suSaveBtn">가입하기</button>
-    </div>
-  </div>
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="assets/js/supabase-client.js"></script>
 <script>
-  var userIdInput = document.getElementById("userId");
-  var pwInput = document.getElementById("userPw");
-  var btnLogin = document.getElementById("btnLogin");
-  var rememberMe = document.getElementById("rememberMe");
+  // TODO: Supabase 프로젝트 정보로 교체 (Project Settings → API)
+  var SUPABASE_URL = 'https://yclrlgcixldovbhygjrc.supabase.co';
+  var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InljbHJsZ2NpeGxkb3ZiaHlnanJjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY2NzI2NTUsImV4cCI6MjEwMjI0ODY1NX0.hk2FB9D45QcGxFXPeNwNENcBusuOnLeakKNqA3gFtmo';
 
-  var savedEmail = localStorage.getItem("rememberedEmail");
-  if (savedEmail) { userIdInput.value = savedEmail; rememberMe.checked = true; }
+  var supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-  // 로그인 후 어느 화면으로 보낼지는 로그인 화면에서 고르는 게 아니라, DB에 저장된 실제 role 기준으로 정해짐 (권한은 RLS가 보장)
-  document.getElementById("loginForm").addEventListener("submit", async function (e) {
+  // role enum('assistant','mid_admin','final_admin') → 이동할 페이지
+  var ROLE_REDIRECT = {
+    assistant: 'index.html',
+    mid_admin: 'manager.html',
+    final_admin: 'admin.html'
+  };
+
+  // ---------------- 로그인/회원가입 폼 전환 ----------------
+  var loginCard = document.getElementById('loginCard');
+  var signupCard = document.getElementById('signupCard');
+
+  document.getElementById('showSignup').addEventListener('click', function () {
+    loginCard.classList.add('hidden');
+    signupCard.classList.remove('hidden');
+  });
+  document.getElementById('showLogin').addEventListener('click', function () {
+    signupCard.classList.add('hidden');
+    loginCard.classList.remove('hidden');
+  });
+
+  function showMsg(el, text, type) {
+    el.textContent = text;
+    el.className = 'form-msg ' + type;
+  }
+
+  // ---------------- 회원가입: 소속부서 목록 불러오기 ----------------
+  (async function loadDepartments() {
+    var deptSelect = document.getElementById('signupDept');
+    var res = await supabase.from('departments').select('id, name').order('name');
+    if (!res.error && res.data) {
+      deptSelect.innerHTML = '<option value="">선택해주세요</option>' +
+        res.data.map(function (d) { return '<option value="' + d.id + '">' + d.name + '</option>'; }).join('');
+    }
+  })();
+
+  // 가입 시 role은 항상 'assistant'로 고정되므로 건물 선택 UI는 제거됨.
+  // 중간관리자/최종관리자 승격은 최종관리자가 나중에 users 테이블을 직접 수정.
+
+  // ---------------- 로그인 ----------------
+  document.getElementById('loginForm').addEventListener('submit', async function (e) {
     e.preventDefault();
-    var email = userIdInput.value.trim();
-    var pw = pwInput.value.trim();
+    var msg = document.getElementById('loginMsg');
+    var btn = document.getElementById('btnLogin');
+    var email = document.getElementById('loginEmail').value.trim();
+    var password = document.getElementById('loginPw').value;
 
-    if (!email || !pw) {
-      alert("아이디와 비밀번호를 모두 입력해주세요.");
+    if (!email || !password) {
+      showMsg(msg, '이메일과 비밀번호를 모두 입력해주세요.', 'error');
+      msg.classList.remove('hidden');
       return;
     }
 
-    btnLogin.disabled = true;
-    btnLogin.textContent = "로그인 중...";
-
-    try {
-      var signInResult = await supabaseClient.auth.signInWithPassword({ email: email, password: pw });
-      if (signInResult.error) {
-        alert("로그인에 실패했습니다: " + signInResult.error.message);
-        return;
-      }
-
-      var profileResult = await supabaseClient
-        .from("assistants")
-        .select("role, is_active")
-        .eq("id", signInResult.data.user.id)
-        .single();
-
-      if (profileResult.error || !profileResult.data) {
-        alert("계정 프로필을 찾을 수 없습니다: " + (profileResult.error ? profileResult.error.message : "프로필 없음"));
-        await supabaseClient.auth.signOut();
-        return;
-      }
-      if (!profileResult.data.is_active) {
-        alert("비활성화된 계정입니다. 관리자에게 문의해주세요.");
-        await supabaseClient.auth.signOut();
-        return;
-      }
-
-      if (rememberMe.checked) localStorage.setItem("rememberedEmail", email);
-      else localStorage.removeItem("rememberedEmail");
-
-      redirectToRoleHome(profileResult.data.role);
-    } catch (err) {
-      alert("예상치 못한 오류가 발생했습니다: " + (err && err.message ? err.message : err));
-      console.error(err);
-    } finally {
-      btnLogin.disabled = false;
-      btnLogin.textContent = "로그인";
-    }
-  });
-
-  /* ---------- 회원가입 모달 ---------- */
-  var signupModalOverlay = document.getElementById("signupModalOverlay");
-  var suRoleSelect = document.getElementById("suRole");
-  var suRoleHint = document.getElementById("suRoleHint");
-
-  document.getElementById("openSignupBtn").addEventListener("click", function (e) {
-    e.preventDefault();
-    document.getElementById("suName").value = "";
-    document.getElementById("suEmail").value = "";
-    document.getElementById("suPassword").value = "";
-    suRoleSelect.value = "assistant";
-    suRoleHint.classList.remove("show");
-    document.getElementById("suErrorBox").classList.remove("show");
-    signupModalOverlay.classList.add("show");
-  });
-  document.getElementById("suCancelBtn").addEventListener("click", function () { signupModalOverlay.classList.remove("show"); });
-  signupModalOverlay.addEventListener("click", function (e) { if (e.target === signupModalOverlay) signupModalOverlay.classList.remove("show"); });
-
-  suRoleSelect.addEventListener("change", function () {
-    suRoleHint.classList.toggle("show", suRoleSelect.value !== "assistant");
-  });
-
-  document.getElementById("suSaveBtn").addEventListener("click", async function () {
-    var errBox = document.getElementById("suErrorBox");
-    var name = document.getElementById("suName").value.trim();
-    var email = document.getElementById("suEmail").value.trim();
-    var password = document.getElementById("suPassword").value;
-    var desiredRole = suRoleSelect.value;
-
-    if (!email) { errBox.textContent = "이메일을 입력해주세요."; errBox.classList.add("show"); return; }
-    if (!password || password.length < 6) { errBox.textContent = "비밀번호는 6자 이상이어야 합니다."; errBox.classList.add("show"); return; }
-
-    var btn = document.getElementById("suSaveBtn");
     btn.disabled = true;
-    btn.textContent = "가입 중...";
+    msg.classList.add('hidden');
 
-    try {
-      var signUpResult = await supabaseClient.auth.signUp({
-        email: email,
-        password: password,
-        options: { data: { name: name || undefined, desired_role: desiredRole } }
-      });
-      if (signUpResult.error) {
-        errBox.textContent = "회원가입에 실패했습니다: " + signUpResult.error.message;
-        errBox.classList.add("show");
-        return;
-      }
+    var authRes = await supabase.auth.signInWithPassword({ email: email, password: password });
 
-      signupModalOverlay.classList.remove("show");
-      if (desiredRole === "assistant") {
-        alert("가입되었습니다. 같은 정보로 로그인해주세요.");
-      } else {
-        alert("가입 신청이 접수되었습니다. 최종관리자가 승인하면 " + (desiredRole === "mid_admin" ? "중간관리자" : "최종관리자") + " 권한이 부여됩니다.\n승인 전까지는 예약자로 로그인하실 수 있어요.");
-      }
-    } catch (err) {
-      errBox.textContent = "예상치 못한 오류가 발생했습니다: " + (err && err.message ? err.message : err);
-      errBox.classList.add("show");
-      console.error(err);
-    } finally {
+    if (authRes.error) {
+      showMsg(msg, '로그인에 실패했습니다: ' + authRes.error.message, 'error');
+      msg.classList.remove('hidden');
       btn.disabled = false;
-      btn.textContent = "가입하기";
+      return;
     }
+
+    // 로그인 성공 → users 테이블에서 실제 role 조회 후 그 role에 맞는 화면으로 이동
+    var profileRes = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', authRes.data.user.id)
+      .single();
+
+    btn.disabled = false;
+
+    if (profileRes.error || !profileRes.data) {
+      showMsg(msg, '계정 정보를 불러오지 못했습니다. 관리자에게 문의해주세요.', 'error');
+      msg.classList.remove('hidden');
+      return;
+    }
+
+    window.location.href = ROLE_REDIRECT[profileRes.data.role] || 'index.html';
   });
+
+  // ---------------- 회원가입 ----------------
+  document.getElementById('signupForm').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    var msg = document.getElementById('signupMsg');
+    var btn = document.getElementById('btnSignup');
+
+    var name = document.getElementById('signupName').value.trim();
+    var email = document.getElementById('signupEmail').value.trim();
+    var password = document.getElementById('signupPw').value;
+    var departmentId = document.getElementById('signupDept').value;
+
+    if (!name || !email || !password) {
+      showMsg(msg, '모든 항목을 입력해주세요.', 'error');
+      msg.classList.remove('hidden');
+      return;
+    }
+    if (!departmentId) {
+      showMsg(msg, '소속부서를 선택해주세요.', 'error');
+      msg.classList.remove('hidden');
+      return;
+    }
+
+    btn.disabled = true;
+    msg.classList.add('hidden');
+
+    // auth.users 계정 생성. role은 절대 여기서 보내지 않음 — 백엔드 트리거가 무조건 'assistant'로 고정 처리함.
+    // users row는 DB 트리거가 auth.users insert 시 raw_user_meta_data를 읽어 자동 생성.
+    var signUpRes = await supabase.auth.signUp({
+      email: email,
+      password: password,
+      options: {
+        data: {
+          name: name,
+          department_id: departmentId
+        }
+      }
+    });
+
+    btn.disabled = false;
+
+    if (signUpRes.error) {
+      showMsg(msg, '회원가입에 실패했습니다: ' + signUpRes.error.message, 'error');
+      msg.classList.remove('hidden');
+      return;
+    }
+
+    showMsg(msg, '가입이 완료됐습니다. 이메일 인증이 필요한 경우 메일함을 확인해주세요.', 'success');
+    msg.classList.remove('hidden');
+    setTimeout(function () {
+      signupCard.classList.add('hidden');
+      loginCard.classList.remove('hidden');
+    }, 1500);
+  });
+
+  // ---------------- 이미 로그인된 세션이면 바로 리다이렉트 ----------------
+  (async function checkExistingSession() {
+    var sessionRes = await supabase.auth.getSession();
+    if (sessionRes.data.session) {
+      var profileRes = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', sessionRes.data.session.user.id)
+        .single();
+      if (profileRes.data) {
+        window.location.href = ROLE_REDIRECT[profileRes.data.role] || 'index.html';
+      }
+    }
+  })();
 </script>
 
 </body>

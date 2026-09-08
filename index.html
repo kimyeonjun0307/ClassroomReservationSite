@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>강의실 예약 · 동서대학교 공간 예약 시스템</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root {
     --primary: #B91C1C; --primary-dark: #7F1010; --primary-light: #D64545;
@@ -102,6 +103,7 @@
   #buildingHint { font-size: 11.5px; color: var(--gray-500); margin: 7px 2px 0; min-height: 14px; }
   #buildingHint.none { color: var(--danger); }
   #buildingHint.ok { color: var(--success); }
+  .hidden-until-building { display: none; }
 
   /* Toggle-button style multi-select */
   .toggle-group { display: flex; flex-wrap: wrap; gap: 7px; }
@@ -176,7 +178,16 @@
   .track-wrap { position: relative; height: 44px; }
 
   .compact-track { display: block; }
-  .grid-body.detail-mode .track-wrap { height: 64px; }
+  .grid-body.detail-mode .compact-track { display: none; }
+
+  .week-view { display: none; }
+  .grid-body.detail-mode .week-view { display: flex; flex-direction: column; gap: 8px; }
+  .day-row { display: grid; grid-template-columns: 34px 1fr; align-items: center; gap: 8px; }
+  .day-label {
+    font-size: 12px; font-weight: 700; color: var(--primary); text-align: center;
+    background: var(--gray-100); border-radius: var(--radius-sm); padding: 4px 0;
+  }
+  .day-row .track-wrap { height: 62px; }
 
   .track {
     position: relative; width: 100%; height: 100%; border-radius: 6px;
@@ -275,10 +286,6 @@
   .btn-secondary:hover { background: var(--gray-50); }
   .btn-secondary.active { background: var(--primary); color: #fff; }
 
-  /* 대여목적 카테고리 */
-  #purposeCustom { margin-top: 8px; display: none; }
-  #purposeCustom.show { display: block; }
-
   /* 확인 모달 (일일 대여 신청 / 취소) */
   .modal-overlay {
     display: none; position: fixed; inset: 0; background: rgba(90,15,15,.5);
@@ -295,6 +302,23 @@
   .modal-btn-confirm { background: var(--primary); color: #fff; }
   .modal-btn-confirm:hover { background: var(--primary-dark); }
 
+  .inquiry-modal-box { width: 440px; }
+  .inquiry-field { margin-bottom: 16px; }
+  .inquiry-field label { display: block; font-size: 12.5px; font-weight: 600; color: var(--gray-700); margin-bottom: 8px; }
+  .inquiry-field textarea {
+    width: 100%; min-height: 120px; border: 1.5px solid var(--gray-200); border-radius: var(--radius-sm);
+    padding: 10px 12px; font-size: 13px; font-family: inherit; background: var(--gray-50); color: var(--gray-900); resize: vertical;
+  }
+  .inquiry-field textarea:focus { outline: none; border-color: var(--primary-light); background: #fff; }
+  #inquiryErrorBox {
+    display: none; background: var(--danger-bg); color: var(--danger); border: 1px solid var(--danger-border);
+    border-radius: var(--radius-sm); padding: 9px 12px; font-size: 12.5px; margin-bottom: 14px; line-height: 1.5;
+  }
+  #inquirySuccessBox {
+    display: none; background: var(--success-bg); color: var(--success); border: 1px solid var(--success-border);
+    border-radius: var(--radius-sm); padding: 9px 12px; font-size: 12.5px; margin-bottom: 14px; line-height: 1.5;
+  }
+
   /* 신청 완료(노란색) 블록 */
   .seg.applied {
     background: var(--warning-bg); color: var(--warning); border: 1.5px dashed var(--warning-border);
@@ -309,8 +333,9 @@
   <div class="title">🏫 동서대학교 강의실 예약</div>
   <div class="menu">
     <span>🔔 알림</span>
+    <span id="inquiryOpenBtn" style="cursor:pointer;">📩 문의하기</span>
     <a href="mypage.html" style="text-decoration: none; color: inherit;"><span>마이페이지</span></a>
-    <span id="logoutBtn" style="cursor:pointer;">로그아웃</span>
+    <a href="#" id="logoutLink" style="text-decoration: none; color: inherit;"><span>로그아웃</span></a>
   </div>
 </header>
 
@@ -322,44 +347,44 @@
       <h2>조건 검색 &amp; 필터</h2>
 
       <div class="field building-box">
-        <label>건물 검색<span class="tag-required">(필수)</span></label>
+        <label>건물 검색<span class="tag-optional">(선택 · 비워두면 전체 건물에서 검색)</span></label>
         <div class="building-search-wrap">
           <div class="building-input-row">
-            <input type="text" id="buildingInput" placeholder="건물명을 입력하세요" autocomplete="off">
+            <input type="text" id="buildingInput" placeholder="건물명을 입력하세요 (선택 사항)" autocomplete="off">
             <button type="button" class="toggle-btn" id="buildingToggle">▼</button>
           </div>
-          <div class="building-dropdown" id="buildingDropdown">
-            <div data-b="UIT관">UIT관</div>
-            <div data-b="전자정보관">전자정보관</div>
-            <div data-b="뉴밀레니엄관">뉴밀레니엄관</div>
-          </div>
+          <div class="building-dropdown" id="buildingDropdown"></div>
         </div>
         <p id="buildingHint"></p>
       </div>
 
-      <div class="field">
+      <div class="field" id="equipField">
         <label>기자재 선택<span class="tag-optional">(선택)</span></label>
-        <div class="toggle-group" id="equipGroup">
-          <div class="toggle-chip" data-val="빔프로젝터">빔프로젝터</div>
-          <div class="toggle-chip" data-val="전자교탁">전자교탁</div>
-          <div class="toggle-chip" data-val="화이트보드">화이트보드</div>
-          <div class="toggle-chip" data-val="VR장비">VR장비</div>
-        </div>
+        <div class="toggle-group" id="equipGroup"></div>
       </div>
 
-      <div class="field">
+      <div class="field" id="typeField">
         <label>공간유형<span class="tag-optional">(선택)</span></label>
-        <div class="toggle-group" id="typeGroup">
-          <div class="toggle-chip" data-val="일반강의실">일반강의실</div>
-          <div class="toggle-chip" data-val="세미나실">세미나실</div>
-          <div class="toggle-chip" data-val="실습실(PC)">실습실(PC)</div>
-        </div>
+        <div class="toggle-group" id="typeGroup"></div>
       </div>
 
-      <div class="field">
-        <label>인원 슬라이더<span class="tag-required">(필수)</span></label>
+      <div class="field" id="peopleField">
+        <label>인원 슬라이더<span class="tag-optional">(선택)</span></label>
         <input type="range" min="2" max="50" value="10" id="peopleRange">
         <div class="slider-labels"><span>2명</span><span id="peopleVal">10명</span><span>50명+</span></div>
+      </div>
+
+      <div class="field" id="dateField">
+        <label>이용 날짜<span class="tag-optional">(선택)</span></label>
+        <input type="date" id="filterDateInput">
+      </div>
+
+      <div class="field" id="timeField">
+        <label>이용 시간<span class="tag-optional">(선택 · 날짜와 함께 입력 시 그 시간에 이용 가능한 강의실만 표시)</span></label>
+        <div class="row-split">
+          <select id="filterStartTimeSelect"><option value="">시작 시간</option></select>
+          <select id="filterEndTimeSelect"><option value="">종료 시간</option></select>
+        </div>
       </div>
 
       <button class="btn" id="searchBtn">검색</button>
@@ -377,12 +402,6 @@
         <label style="font-size: 12px; font-weight: 600; color: #666; margin-bottom: 6px; display: block;">층 필터</label>
         <select id="resultFloorSelect">
           <option value="">전체 층</option>
-          <option value="1">1층</option>
-          <option value="2">2층</option>
-          <option value="3">3층</option>
-          <option value="4">4층</option>
-          <option value="5">5층</option>
-          <option value="6">6층</option>
         </select>
         <label class="fav-filter-row">
           <input type="checkbox" id="favOnlyCheck">
@@ -449,23 +468,17 @@
 
     <div class="field">
       <label>대여목적</label>
-      <select id="purposeSelect">
-        <option value="">선택해주세요</option>
-        <option value="조별 과제">조별 과제</option>
-        <option value="스터디">스터디</option>
-        <option value="동아리 활동">동아리 활동</option>
-        <option value="세미나/발표 연습">세미나/발표 연습</option>
-        <option value="정규 수업">정규 수업</option>
-        <option value="기타">기타 (직접입력)</option>
-      </select>
-      <input type="text" id="purposeCustom" placeholder="대여 목적을 입력하세요">
+      <input type="text" id="purposeInput" placeholder="대여 목적을 입력하세요">
     </div>
     <div class="field">
       <label>이용인원</label>
-      <input type="number" id="headcountInput" placeholder="예: 4" min="1">
+      <input type="number" id="headcountInput" min="1" placeholder="예: 4">
     </div>
 
-    <div class="guideline" id="guidelineBox" style="display:none;"></div>
+    <div class="guideline">
+      ※ 실습실 내 음료 반입 금지<br>
+      ※ 대여 10분 전 카카오톡 QR코드 발송
+    </div>
 
     <div class="apply-btn-row">
       <button class="btn" id="dailyApplyBtn" type="button">일일 대여 신청</button>
@@ -500,94 +513,119 @@
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="assets/js/supabase-client.js"></script>
+<!-- 문의하기 모달 -->
+<div class="modal-overlay" id="inquiryModalOverlay">
+  <div class="modal-box inquiry-modal-box">
+    <div class="modal-title">중간관리자에게 문의하기</div>
+    <div class="modal-desc">문의 유형을 선택하면 자주 묻는 내용으로 빠르게 작성할 수 있고, 직접 자유롭게 내용을 적으셔도 됩니다. 담당 중간관리자가 확인 후 답변을 남겨드립니다.</div>
+
+    <div class="inquiry-field">
+      <label>문의 유형</label>
+      <div class="toggle-group" id="inquiryCategoryGroup">
+        <div class="toggle-chip" data-val="예약/취소 문의">예약/취소 문의</div>
+        <div class="toggle-chip" data-val="강의실 시설·기자재 문의">강의실 시설·기자재 문의</div>
+        <div class="toggle-chip" data-val="계정/로그인 문의">계정/로그인 문의</div>
+        <div class="toggle-chip" data-val="건의사항">건의사항</div>
+        <div class="toggle-chip" data-val="기타">기타</div>
+      </div>
+    </div>
+
+    <div class="inquiry-field">
+      <label>문의 내용</label>
+      <textarea id="inquiryContentInput" placeholder="문의하실 내용을 자유롭게 작성해주세요."></textarea>
+    </div>
+
+    <div class="modal-error-box" id="inquiryErrorBox"></div>
+    <div id="inquirySuccessBox"></div>
+
+    <div class="modal-actions">
+      <button type="button" class="modal-btn-cancel" id="inquiryModalCancelBtn">취소</button>
+      <button type="button" class="modal-btn-confirm" id="inquirySubmitBtn">문의 등록</button>
+    </div>
+  </div>
+</div>
+
 <script>
-  var CURRENT_USER = null;
-  var BUILDINGS = [];       // [{id, name, has_equipment, contact_dept, contact_phone, contact_email}]
-  var ROOM_TYPES = [];      // [{id, name}]
-  var EQUIPMENT = [];       // [{id, name}]
-  var favoriteRoomIds = {}; // roomId -> true
-  var searchResults = [];   // 현재 검색 결과 room 객체 배열
-  var busyByRoom = {};      // roomId -> [{start,end,kind:'busy'|'class'|'mine',bookingId?,label}]
-  var currentBuildingObj = null;
-  var currentRoomId = null;
-  var detailMode = false;
-  var dragState = null;
-  var pendingSlot = null; // {start,end} - 드래그로 선택된 (아직 신청 안 한) 시간대, 강의실당 1개
+  // TODO: login.html과 동일한 Supabase 프로젝트 정보로 교체
+  var SUPABASE_URL = 'https://yclrlgcixldovbhygjrc.supabase.co';
+  var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InljbHJsZ2NpeGxkb3ZiaHlnanJjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY2NzI2NTUsImV4cCI6MjEwMjI0ODY1NX0.hk2FB9D45QcGxFXPeNwNENcBusuOnLeakKNqA3gFtmo';
+  var supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-  function escapeHtml(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-    });
+  // 로그인 세션 확인 후 users row(내 정보)를 가져옴. 로그인 안 돼있으면 로그인 화면으로.
+  var currentAssistant = null; // { id, name, role, department_id }
+  async function requireSessionAndLoadAssistant() {
+    var sessionRes = await supabase.auth.getSession();
+    if (!sessionRes.data.session) {
+      window.location.href = 'login.html';
+      return false;
+    }
+    var profileRes = await supabase.from('users').select('id, name, role, department_id').eq('id', sessionRes.data.session.user.id).single();
+    if (profileRes.error || !profileRes.data) {
+      window.location.href = 'login.html';
+      return false;
+    }
+    currentAssistant = profileRes.data;
+    return true;
   }
 
-  function formatDateISO(d) {
-    var mm = ('0' + (d.getMonth() + 1)).slice(-2);
-    var dd = ('0' + d.getDate()).slice(-2);
-    return d.getFullYear() + '-' + mm + '-' + dd;
+  // DB에서 채워지는 값들 (fetchAppData()가 페이지 로드 시 채움)
+  var VALID_BUILDINGS = [];       // 건물명 목록 (status=true인 건물만)
+  var BUILDINGS_BY_NAME = {};     // name -> {id, name, status}
+  var EQUIPMENT_LIST = [];        // [{id, name}]
+  var ROOM_TYPES_LIST = [];       // [{id, name}]
+  var ROOM_TYPE_NAME_BY_ID = {};  // id -> name
+  var CURRENT_SEMESTER_ID = null; // semesters.is_current = true 인 학기 id
+  var CURRENT_SEMESTER = null;    // { id, start_date, end_date }
+
+  // buildings 테이블에 문의처 컬럼(contact_dept 등)이 더 이상 없어서 상세 문의처 박스는 항상 숨김
+  function renderContactBox() {
+    document.getElementById('contactBox').style.display = 'none';
   }
 
-  function timeToHour(t) {
-    var p = t.split(':');
-    return parseInt(p[0], 10) + parseInt(p[1], 10) / 60;
-  }
-
-  function hourToTimeStr(h) {
-    var hh = Math.floor(h);
-    var mm = Math.round((h - hh) * 60);
-    return ('0' + hh).slice(-2) + ':' + ('0' + mm).slice(-2) + ':00';
-  }
-
-  /* ---------- 초기화: 로그인 확인 + 기준 데이터 로드 ---------- */
-  (async function init() {
-    var auth = await requireRole(['assistant']);
-    if (!auth) return;
-    CURRENT_USER = auth.session.user;
-
-    document.getElementById('logoutBtn').addEventListener('click', signOutAndRedirect);
-
-    await Promise.all([loadBuildings(), loadRoomTypes(), loadEquipment(), loadFavorites()]);
-  })();
-
-  async function loadBuildings() {
-    var res = await supabaseClient.from('buildings').select('id, name, has_equipment, contact_dept, contact_phone, contact_email').order('name');
-    BUILDINGS = res.data || [];
-  }
-
-  async function loadRoomTypes() {
-    var res = await supabaseClient.from('room_types').select('id, name').order('name');
-    ROOM_TYPES = res.data || [];
-    document.getElementById('typeGroup').innerHTML = ROOM_TYPES.map(function (t) {
-      return '<div class="toggle-chip" data-val="' + escapeHtml(t.name) + '">' + escapeHtml(t.name) + '</div>';
+  /* ---------- DB에서 건물/기자재/공간유형 마스터 데이터 로드 ---------- */
+  function renderEquipChips() {
+    document.getElementById('equipGroup').innerHTML = EQUIPMENT_LIST.map(function (e) {
+      return '<div class="toggle-chip" data-val="' + e.name + '">' + e.name + '</div>';
     }).join('');
-    attachChipHandlers('typeGroup');
   }
 
-  async function loadEquipment() {
-    var res = await supabaseClient.from('equipment').select('id, name').order('id');
-    EQUIPMENT = res.data || [];
-    document.getElementById('equipGroup').innerHTML = EQUIPMENT.map(function (eq) {
-      return '<div class="toggle-chip" data-val="' + escapeHtml(eq.name) + '">' + escapeHtml(eq.name) + '</div>';
+  function renderTypeChips() {
+    document.getElementById('typeGroup').innerHTML = ROOM_TYPES_LIST.map(function (t) {
+      return '<div class="toggle-chip" data-val="' + t.name + '">' + t.name + '</div>';
     }).join('');
-    attachChipHandlers('equipGroup');
   }
 
-  async function loadFavorites() {
-    var res = await supabaseClient.from('favorites').select('room_id').eq('assistant_id', CURRENT_USER.id);
-    favoriteRoomIds = {};
-    (res.data || []).forEach(function (f) { favoriteRoomIds[f.room_id] = true; });
-  }
+  async function fetchAppData() {
+    var buildingsRes = await supabase.from('buildings').select('id, name, status').eq('status', true).order('name');
+    if (!buildingsRes.error && buildingsRes.data) {
+      VALID_BUILDINGS = buildingsRes.data.map(function (b) { return b.name; });
+      BUILDINGS_BY_NAME = {};
+      buildingsRes.data.forEach(function (b) { BUILDINGS_BY_NAME[b.name] = b; });
+      renderBuildingOptions([]); // 드롭다운은 열릴 때 다시 채워짐
+    }
 
-  function attachChipHandlers(gid) {
-    document.getElementById(gid).querySelectorAll('.toggle-chip').forEach(function (chip) {
-      chip.addEventListener('click', function () { chip.classList.toggle('active'); });
-    });
+    var equipRes = await supabase.from('equipment').select('id, name').order('id');
+    if (!equipRes.error && equipRes.data) {
+      EQUIPMENT_LIST = equipRes.data;
+      renderEquipChips();
+    }
+
+    var typesRes = await supabase.from('room_types').select('id, name').order('id');
+    if (!typesRes.error && typesRes.data) {
+      ROOM_TYPES_LIST = typesRes.data;
+      ROOM_TYPE_NAME_BY_ID = {};
+      typesRes.data.forEach(function (t) { ROOM_TYPE_NAME_BY_ID[t.id] = t.name; });
+      renderTypeChips();
+    }
+
+    var semRes = await supabase.from('semesters').select('id, start_date, end_date').eq('is_current', true).limit(1).maybeSingle();
+    CURRENT_SEMESTER = (!semRes.error && semRes.data) ? semRes.data : null;
+    CURRENT_SEMESTER_ID = CURRENT_SEMESTER ? CURRENT_SEMESTER.id : null;
   }
 
   /* ---------- 중앙 타임라인 상단 날짜 이동 (화살표 / 달력) ---------- */
   var WEEKDAY_KOR = ['일', '월', '화', '수', '목', '금', '토'];
-  var currentViewDate = new Date();
+  var currentViewDate = new Date(); // 오늘 날짜
   var currentTitleSuffix = '전체 보기';
 
   function getDateLabel() {
@@ -604,40 +642,37 @@
     document.getElementById('centerTitle').textContent = getDateLabel() + ' · ' + currentTitleSuffix;
   }
 
-  // 날짜가 바뀌면 지금 보고 있는 결과(목록 or 상세)를 그 날짜 기준으로 다시 불러온다
-  async function onDateChanged() {
+  // 날짜가 바뀌면(주가 바뀔 수 있으므로) 검색이 진행 중인 경우 스케줄을 다시 조회해서 그림
+  function onViewDateChanged() {
     refreshCenterTitle();
-    if (!searchResults.length) return;
-    pendingSlot = null;
-    document.getElementById('selectedSlotBox').style.display = 'none';
-    await refreshScheduleData();
-    if (detailMode && currentRoomId) {
-      renderDetailTrack();
-    } else {
-      renderAllCompactTracks();
-    }
+    if (currentSearchRoomIds.length) renderSearchResults();
   }
 
   document.getElementById('prevDateBtn').addEventListener('click', function () {
     currentViewDate.setDate(currentViewDate.getDate() - 1);
-    onDateChanged();
+    onViewDateChanged();
   });
 
   document.getElementById('nextDateBtn').addEventListener('click', function () {
     currentViewDate.setDate(currentViewDate.getDate() + 1);
-    onDateChanged();
+    onViewDateChanged();
   });
 
   var calendarInput = document.getElementById('calendarInput');
   document.getElementById('calendarBtn').addEventListener('click', function () {
-    if (calendarInput.showPicker) { calendarInput.showPicker(); } else { calendarInput.focus(); calendarInput.click(); }
+    if (calendarInput.showPicker) {
+      calendarInput.showPicker();
+    } else {
+      calendarInput.focus();
+      calendarInput.click();
+    }
   });
 
   calendarInput.addEventListener('change', function () {
     if (!calendarInput.value) return;
     var parts = calendarInput.value.split('-').map(Number);
     currentViewDate = new Date(parts[0], parts[1] - 1, parts[2]);
-    onDateChanged();
+    onViewDateChanged();
   });
 
   /* ---------- 건물 검색 (토글 + 직접입력 + 실시간 자동완성) ---------- */
@@ -646,16 +681,18 @@
   var buildingToggle = document.getElementById('buildingToggle');
   var buildingDropdown = document.getElementById('buildingDropdown');
 
-  function buildingNames() { return BUILDINGS.map(function (b) { return b.name; }); }
-
+  // 건물 목록을 드롭다운에 렌더링 (필터링된 목록을 매번 다시 그림)
   function renderBuildingOptions(list) {
     buildingDropdown.innerHTML = list.map(function (b) {
-      return '<div data-b="' + escapeHtml(b) + '">' + escapeHtml(b) + '</div>';
+      return '<div data-b="' + b + '">' + b + '</div>';
     }).join('');
   }
 
   function openDropdownWith(list) {
-    if (!list.length) { closeDropdown(); return; }
+    if (!list.length) {
+      closeDropdown();
+      return;
+    }
     renderBuildingOptions(list);
     buildingDropdown.classList.add('show');
     buildingToggle.classList.add('open');
@@ -668,55 +705,77 @@
 
   function matchBuildings(query) {
     var q = query.toLowerCase();
-    return buildingNames().filter(function (b) { return b.toLowerCase().indexOf(q) !== -1; });
+    return VALID_BUILDINGS.filter(function (b) {
+      return b.toLowerCase().indexOf(q) !== -1;
+    });
   }
 
+  // ▼ 토글 버튼: 필터와 무관하게 전체 건물 목록을 펼쳐봄
   buildingToggle.addEventListener('click', function () {
-    if (buildingDropdown.classList.contains('show')) closeDropdown();
-    else openDropdownWith(buildingNames());
+    if (buildingDropdown.classList.contains('show')) {
+      closeDropdown();
+    } else {
+      openDropdownWith(VALID_BUILDINGS);
+    }
   });
 
+  // 드롭다운 항목 클릭 (동적으로 다시 그려지므로 이벤트 위임 방식 사용)
   buildingDropdown.addEventListener('click', function (e) {
     var item = e.target.closest('div[data-b]');
     if (!item) return;
     buildingInput.value = item.getAttribute('data-b');
     closeDropdown();
     validateBuilding();
-    updateEquipmentFieldVisibility();
   });
 
   document.addEventListener('click', function (e) {
-    if (!e.target.closest('.building-box')) closeDropdown();
+    if (!e.target.closest('.building-box')) {
+      closeDropdown();
+    }
   });
+
+  // 건물 검색은 이제 선택 항목: 비워두면 전체(활성화된) 건물을 대상으로 검색하고,
+  // 값을 입력한 경우에만 그 건물 하나로 좁혀서 검색한다.
+  var searchBtnEl = document.getElementById('searchBtn');
 
   function validateBuilding() {
     var v = buildingInput.value.trim();
-    if (!v) { buildingHint.textContent = ''; buildingHint.className = ''; return false; }
-    if (buildingNames().indexOf(v) !== -1) {
-      buildingHint.textContent = '"' + v + '" 검색됨';
+    if (!v) { buildingHint.textContent = '건물을 지정하지 않으면 전체 건물에서 검색합니다.'; buildingHint.className = ''; return true; }
+    if (VALID_BUILDINGS.indexOf(v) !== -1) {
+      buildingHint.textContent = '"' + v + '" 건물로 검색됩니다.';
       buildingHint.className = 'ok';
       return true;
+    } else {
+      buildingHint.textContent = '해당 건물이 없습니다.';
+      buildingHint.className = 'none';
+      return false;
     }
-    buildingHint.textContent = '해당 건물이 없습니다.';
-    buildingHint.className = 'none';
-    return false;
   }
 
-  function updateEquipmentFieldVisibility() {
-    var b = BUILDINGS.filter(function (x) { return x.name === buildingInput.value.trim(); })[0];
-    document.getElementById('equipGroup').closest('.field').style.display = (b && b.has_equipment) ? 'block' : 'none';
-  }
-
+  // 입력 즉시 실시간 필터링 (대소문자 구분 없이 포함 매칭)
   buildingInput.addEventListener('input', function () {
     var v = buildingInput.value.trim();
-    if (!v) closeDropdown(); else openDropdownWith(matchBuildings(v));
+    if (!v) {
+      closeDropdown();
+    } else {
+      openDropdownWith(matchBuildings(v));
+    }
     validateBuilding();
-    updateEquipmentFieldVisibility();
   });
 
+  // 값이 있는 상태로 다시 포커스하면 해당 값 기준으로 필터링된 목록이 다시 열림
   buildingInput.addEventListener('focus', function () {
     var v = buildingInput.value.trim();
     if (v) openDropdownWith(matchBuildings(v));
+  });
+
+  /* ---------- 기자재 / 공간유형 다중선택 (칩이 DB에서 동적으로 그려지므로 이벤트 위임 방식 사용) ---------- */
+  ['equipGroup', 'typeGroup'].forEach(function (gid) {
+    document.getElementById(gid).addEventListener('click', function (e) {
+      var chip = e.target.closest('.toggle-chip');
+      if (!chip) return;
+      chip.classList.toggle('active');
+    });
   });
 
   /* ---------- 인원 슬라이더 ---------- */
@@ -724,10 +783,139 @@
     document.getElementById('peopleVal').textContent = e.target.value + '명';
   });
 
-  /* ---------- 타임라인 상수 ---------- */
-  var TIME_START = 9;
-  var TIME_END = 19;
-  var SNAP = 1;
+  /* ---------- 이용 시간 필터(시작/종료) 옵션 채우기 (09:00~19:00, 1시간 단위) ---------- */
+  (function fillFilterTimeOptions() {
+    var startSel = document.getElementById('filterStartTimeSelect');
+    var endSel = document.getElementById('filterEndTimeSelect');
+    var startHtml = '<option value="">시작 시간</option>';
+    var endHtml = '<option value="">종료 시간</option>';
+    for (var h = 9; h <= 19; h++) {
+      var label = (h < 10 ? '0' : '') + h + ':00';
+      startHtml += '<option value="' + h + '">' + label + '</option>';
+      endHtml += '<option value="' + h + '">' + label + '</option>';
+    }
+    startSel.innerHTML = startHtml;
+    endSel.innerHTML = endHtml;
+  })();
+
+  /* ---------- 층 표시 라벨 (지하는 음수 floor로 저장됨) ---------- */
+  function floorLabel(f) {
+    var n = parseInt(f, 10);
+    return n < 0 ? ('지하' + (-n) + '층') : (n + '층');
+  }
+
+  /* ---------- 타임라인 데이터 & 렌더링 (연속 트랙 방식) ---------- */
+  var TIME_START = 9;   // 09:00
+  var TIME_END = 19;    // 19:00 (총 10시간)
+  var SNAP = 1;           // 1시간 단위로만 예약 가능
+  var PROFESSORS = ['김민수 교수', '이지현 교수', '박철수 교수', '최영희 교수'];
+  var WEEKDAYS = [
+    { key: 'mon', label: '월', fullLabel: '월요일' },
+    { key: 'tue', label: '화', fullLabel: '화요일' },
+    { key: 'wed', label: '수', fullLabel: '수요일' },
+    { key: 'thu', label: '목', fullLabel: '목요일' },
+    { key: 'fri', label: '금', fullLabel: '금요일' }
+  ];
+  var WEEKDAY_LABEL = {};
+  WEEKDAYS.forEach(function (d) { WEEKDAY_LABEL[d.key] = d.fullLabel; });
+  // class_schedules.weekday 확정 규칙: 일=0, 월=1, 화=2, 수=3, 목=4, 금=5, 토=6 (JS Date.getDay()와 동일).
+  // class_schedules를 INSERT하는 다른 화면(admin.html 등)도 반드시 이 규칙을 따라야 함.
+  var WEEKDAY_NUM = { mon: 1, tue: 2, wed: 3, thu: 4, fri: 5 };
+
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+  function dateToISO(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+  function hourToTimeStr(h) { return pad2(h) + ':00:00'; }
+  function timeStrToHour(t) { return parseInt(String(t).split(':')[0], 10); }
+
+  // 주어진 날짜가 속한 주(월~금)의 날짜(ISO 문자열)를 요일 키별로 반환
+  function weekDatesFromViewDate(viewDate) {
+    var day = viewDate.getDay(); // 0=일 ... 6=토
+    var mondayOffset = (day === 0) ? -6 : (1 - day);
+    var monday = new Date(viewDate);
+    monday.setDate(viewDate.getDate() + mondayOffset);
+
+    var result = {};
+    WEEKDAYS.forEach(function (d, idx) {
+      var dt = new Date(monday);
+      dt.setDate(monday.getDate() + idx);
+      result[d.key] = dateToISO(dt);
+    });
+    return result;
+  }
+
+  // roomKey -> { mon:[...], tue:[...], wed:[...], thu:[...], fri:[...] }, 각 배열 원소: {start,end,type:'busy'|'pending'|'applied',prof|purpose,bookingId}
+  var schedulesByRoom = {};
+  var favoriteRooms = {};     // roomKey -> true (즐겨찾기 등록된 강의실)
+  var currentBFullName = '';
+  var currentPrefix = '';
+  var detailMode = false;
+  var dragState = null;
+  var lastSelectedSlot = null; // {roomKey, roomLabel, day, start, end} - 드래그로 선택된 시간대
+  var currentRoomKey = null; // 현재 상세보기 중인 강의실
+  var currentSearchRoomIds = []; // 마지막 검색 결과 강의실 id 목록 (날짜 이동 시 스케줄 재조회용)
+
+  // 임의 스케줄 생성 (UI 시각화 용도) - 겹치지 않는 구간만 만들어서
+  // 자연스럽게 병합된 형태로 나오므로 뚝뚝 끊기는 블록이 생기지 않음
+  function generateSchedule() {
+    var blocks = [];
+    var t = TIME_START;
+    var durOptions = [1, 1, 2];
+    while (t < TIME_END) {
+      if (Math.random() > 0.62 && (TIME_END - t) >= 1) {
+        var dur = Math.min(durOptions[Math.floor(Math.random() * durOptions.length)], TIME_END - t);
+        var prof = PROFESSORS[Math.floor(Math.random() * PROFESSORS.length)];
+        blocks.push({ start: t, end: t + dur, prof: prof, type: 'busy' });
+        t += dur;
+      } else {
+        t += SNAP;
+      }
+    }
+    return blocks;
+  }
+
+  // 월~금 5일치 스케줄을 한 번에 생성 (데이터 로드 실패 등 예외 상황의 fallback 용도)
+  function generateWeekSchedule() {
+    var week = {};
+    WEEKDAYS.forEach(function (d) { week[d.key] = generateSchedule(); });
+    return week;
+  }
+
+  // 실제 DB(class_schedules + bookings)로부터 이번 주(월~금) 강의실 스케줄을 구성
+  function buildRoomWeekSchedule(roomId, classSchedulesByRoomId, bookingsByRoomId, weekDates) {
+    var week = {};
+    WEEKDAYS.forEach(function (d) { week[d.key] = []; });
+
+    (classSchedulesByRoomId[roomId] || []).forEach(function (cs) {
+      WEEKDAYS.forEach(function (d) {
+        if (cs.weekday !== WEEKDAY_NUM[d.key]) return;
+        var dateStr = weekDates[d.key];
+        // 학기(semesters) 기간 밖이면 표시하지 않음 (class_schedules 자체엔 반복기간 컬럼이 없고, semester_id로 학기에 연결됨)
+        if (CURRENT_SEMESTER && (CURRENT_SEMESTER.start_date > dateStr || CURRENT_SEMESTER.end_date < dateStr)) return;
+        week[d.key].push({
+          start: timeStrToHour(cs.start_time),
+          end: timeStrToHour(cs.end_time),
+          prof: (cs.professor_name || '정규 수업') + (cs.subject_name ? (' · ' + cs.subject_name) : ''),
+          type: 'busy'
+        });
+      });
+    });
+
+    (bookingsByRoomId[roomId] || []).forEach(function (bk) {
+      WEEKDAYS.forEach(function (d) {
+        if (weekDates[d.key] !== bk.booking_date) return;
+        week[d.key].push({
+          start: timeStrToHour(bk.start_time),
+          end: timeStrToHour(bk.end_time),
+          type: 'applied',
+          status: bk.status,
+          bookingId: bk.id,
+          requesterId: bk.requester_id
+        });
+      });
+    });
+
+    return week;
+  }
 
   function timeLabel(h) {
     var hh = Math.floor(h);
@@ -741,223 +929,105 @@
     return 'left:' + left + '%; width:' + width + '%;';
   }
 
+  function renderTrack(roomKey, day) {
+    var blocks = (schedulesByRoom[roomKey] && schedulesByRoom[roomKey][day]) || [];
+    var html = '';
+    blocks.forEach(function (b) {
+      if (b.type === 'busy') {
+        html += '<div class="seg busy" style="' + segStyle(b) + '" data-info="' + b.prof + ' · ' + timeLabel(b.start) + '-' + timeLabel(b.end) + ' 수업">' + b.prof + '</div>';
+      } else if (b.type === 'pending') {
+        html += '<div class="seg pending" data-start="' + b.start + '" data-end="' + b.end + '" style="' + segStyle(b) + '">예약 신청 ' + timeLabel(b.start) + '-' + timeLabel(b.end) + '</div>';
+      } else if (b.type === 'applied') {
+        html += '<div class="seg applied" data-start="' + b.start + '" data-end="' + b.end + '" data-booking-id="' + (b.bookingId != null ? b.bookingId : '') + '" data-status="' + (b.status || '') + '" data-requester-id="' + (b.requesterId || '') + '" style="' + segStyle(b) + '">' + (b.status === 'approved' ? '승인완료' : '승인대기') + ' ' + timeLabel(b.start) + '-' + timeLabel(b.end) + '</div>';
+      }
+    });
+    return html;
+  }
+
   function snapHour(h) {
     return Math.min(TIME_END - SNAP, Math.max(TIME_START, Math.floor(h / SNAP) * SNAP));
   }
 
   function defaultTooltipText() {
     return detailMode
-      ? '빈 트랙을 드래그하면 1시간 단위로 예약을 신청할 수 있습니다. (초록 블록 클릭 시 취소, 노란 블록은 내가 신청한 예약)'
-      : '회색 블록에 마우스를 올리면 예약/수업 정보가 표시됩니다.';
+      ? '빈 트랙을 드래그하면 1시간 단위로 예약을 신청할 수 있습니다. (초록 블록 클릭 시 취소, 노란 블록은 신청 완료된 예약)'
+      : '회색 블록에 마우스를 올리면 담당 교수님과 수업 정보가 표시됩니다.';
   }
 
-  function floorLabelText(f) { return f < 0 ? ('지하' + (-f) + '층') : (f + '층'); }
+  // room: DB rooms row {id, floor, room_no, capacity, room_type_id, ...}, bFullName: 건물명
+  // roomTypeName: room_types.name, equipNames: ['빔프로젝터', ...]
+  // multiBuilding: true면 건물을 특정하지 않고 검색한 결과이므로, 목록에 건물명을 함께 표시
+  function buildRoomRow(room, bFullName, roomTypeName, equipNames, multiBuilding) {
+    var roomKey = 'room_' + room.id;
+    var roomNameStr = room.room_no;
+    var displayName = multiBuilding ? (bFullName + ' ' + room.room_no) : room.room_no;
+    var f = room.floor;
+    if (!schedulesByRoom[roomKey]) schedulesByRoom[roomKey] = generateWeekSchedule();
 
-  function renderTrackHtml(roomId) {
-    var blocks = busyByRoom[roomId] || [];
-    var html = '';
-    blocks.forEach(function (b) {
-      if (b.kind === 'mine') {
-        html += '<div class="seg applied" data-booking-id="' + b.bookingId + '" style="' + segStyle(b) + '">신청 완료 ' + timeLabel(b.start) + '-' + timeLabel(b.end) + '</div>';
-      } else {
-        html += '<div class="seg busy" style="' + segStyle(b) + '" data-info="' + escapeHtml(b.label) + ' · ' + timeLabel(b.start) + '-' + timeLabel(b.end) + '">' + escapeHtml(b.kind === 'class' ? b.label : '예약됨') + '</div>';
-      }
-    });
-    if (detailMode && roomId === currentRoomId && pendingSlot) {
-      html += '<div class="seg pending" style="' + segStyle(pendingSlot) + '">예약 신청 ' + timeLabel(pendingSlot.start) + '-' + timeLabel(pendingSlot.end) + '</div>';
-    }
-    return html;
-  }
-
-  function hasOverlap(roomId, start, end) {
-    var blocks = busyByRoom[roomId] || [];
-    return blocks.some(function (b) { return start < b.end && end > b.start; });
-  }
-
-  /* ---------- 선택된 날짜 기준 스케줄(예약+정기수업) 불러오기 ---------- */
-  async function refreshScheduleData() {
-    var roomIds = searchResults.map(function (r) { return r.id; });
-    if (!roomIds.length) { busyByRoom = {}; return; }
-    var dateStr = formatDateISO(currentViewDate);
-    var jsDay = currentViewDate.getDay();
-    var ourWeekday = (jsDay >= 1 && jsDay <= 5) ? jsDay : null;
-
-    var busyPromise = supabaseClient.from('room_busy_slots').select('room_id, start_time, end_time').in('room_id', roomIds).eq('date', dateStr);
-    var classPromise = ourWeekday
-      ? supabaseClient.from('class_schedules').select('room_id, start_time, end_time, subject_name, professor_name, semesters(start_date, end_date)').in('room_id', roomIds).eq('weekday', ourWeekday)
-      : Promise.resolve({ data: [] });
-    var minePromise = supabaseClient.from('bookings').select('id, room_id, start_time, end_time, purpose, status').in('room_id', roomIds).eq('date', dateStr).eq('requester_id', CURRENT_USER.id).in('status', ['pending', 'approved']);
-
-    var results = await Promise.all([busyPromise, classPromise, minePromise]);
-    var busyRes = results[0], classRes = results[1], mineRes = results[2];
-
-    var map = {};
-    roomIds.forEach(function (id) { map[id] = []; });
-
-    (busyRes.data || []).forEach(function (b) {
-      map[b.room_id].push({ start: timeToHour(b.start_time), end: timeToHour(b.end_time), kind: 'busy', label: '예약됨' });
-    });
-    (classRes.data || []).forEach(function (c) {
-      if (!c.semesters) return;
-      if (dateStr < c.semesters.start_date || dateStr > c.semesters.end_date) return;
-      map[c.room_id].push({ start: timeToHour(c.start_time), end: timeToHour(c.end_time), kind: 'class', label: c.professor_name + ' · ' + c.subject_name });
-    });
-    (mineRes.data || []).forEach(function (m) {
-      map[m.room_id].push({ start: timeToHour(m.start_time), end: timeToHour(m.end_time), kind: 'mine', bookingId: m.id, label: '내 신청 (' + m.purpose + ')' });
-    });
-
-    busyByRoom = map;
-  }
-
-  /* ---------- 검색 ---------- */
-  document.getElementById('searchBtn').addEventListener('click', async function () {
-    if (!validateBuilding()) {
-      buildingHint.textContent = buildingInput.value.trim() ? '해당 건물이 없습니다.' : '건물 검색은 필수 입력입니다.';
-      buildingHint.className = 'none';
-      buildingInput.focus();
-      return;
-    }
-
-    var bName = buildingInput.value.trim();
-    currentBuildingObj = BUILDINGS.filter(function (b) { return b.name === bName; })[0];
-
-    var selectedTypeNames = Array.prototype.slice.call(document.getElementById('typeGroup').querySelectorAll('.toggle-chip.active')).map(function (c) { return c.getAttribute('data-val'); });
-    var selectedEquipNames = currentBuildingObj.has_equipment
-      ? Array.prototype.slice.call(document.getElementById('equipGroup').querySelectorAll('.toggle-chip.active')).map(function (c) { return c.getAttribute('data-val'); })
-      : [];
-    var minCapacity = parseInt(document.getElementById('peopleRange').value, 10);
-
-    var query = supabaseClient.from('rooms')
-      .select('id, floor, room_no, room_name, capacity, thumbnail_url, guideline_text, managing_dept, manager_name, contact_phone, contact_email, room_types(name), room_equipment(equipment(name))')
-      .eq('building_id', currentBuildingObj.id)
-      .eq('is_active', true)
-      .gte('capacity', minCapacity)
-      .order('floor', { ascending: true })
-      .order('room_no', { ascending: true });
-
-    if (selectedTypeNames.length) {
-      var typeIds = ROOM_TYPES.filter(function (t) { return selectedTypeNames.indexOf(t.name) !== -1; }).map(function (t) { return t.id; });
-      query = query.in('room_type_id', typeIds);
-    }
-
-    var res = await query;
-    if (res.error) { showApplyMessage('검색 중 오류가 발생했습니다: ' + res.error.message, 'error'); return; }
-
-    var rooms = res.data || [];
-    if (selectedEquipNames.length) {
-      rooms = rooms.filter(function (r) {
-        var have = (r.room_equipment || []).map(function (re) { return re.equipment.name; });
-        return selectedEquipNames.every(function (name) { return have.indexOf(name) !== -1; });
-      });
-    }
-
-    searchResults = rooms;
-    pendingSlot = null;
-    currentRoomId = null;
-    exitDetailMode(true);
-    await refreshScheduleData();
-    renderSearchResults();
-
-    document.getElementById('filterView').style.display = 'none';
-    document.getElementById('resultView').style.display = 'flex';
-    setCenterTitle(bName);
-
-    populateFloorFilterOptions();
-    resultFloorSelect.value = '';
-    applyFloorFilter();
-  });
-
-  function populateFloorFilterOptions() {
-    var floors = Array.prototype.slice.call(new Set(searchResults.map(function (r) { return r.floor; })));
-    floors.sort(function (a, b) { return a - b; });
-    resultFloorSelect.innerHTML = '<option value="">전체 층</option>' +
-      floors.map(function (f) { return '<option value="' + f + '">' + floorLabelText(f) + '</option>'; }).join('');
-  }
-
-  function renderSearchResults() {
-    var resultList = document.getElementById('resultList');
-    var timelineListContainer = document.getElementById('timelineListContainer');
-    resultList.innerHTML = '';
-    timelineListContainer.innerHTML = '';
-
-    var lastFloor = null;
-    searchResults.forEach(function (room) {
-      if (room.floor !== lastFloor) {
-        var floorLabel = document.createElement('div');
-        floorLabel.className = 'floor-label';
-        floorLabel.setAttribute('data-floor', room.floor);
-        floorLabel.textContent = floorLabelText(room.floor);
-        resultList.appendChild(floorLabel);
-        lastFloor = room.floor;
-      }
-      var built = buildRoomRow(room);
-      resultList.appendChild(built.item);
-      timelineListContainer.appendChild(built.timelineRow);
-    });
-  }
-
-  function buildRoomRow(room) {
-    var isFav = !!favoriteRoomIds[room.id];
-    var typeName = room.room_types ? room.room_types.name : '';
+    var isFav = !!favoriteRooms[roomKey];
 
     var item = document.createElement('div');
     item.className = 'room-item';
-    item.setAttribute('data-floor', room.floor);
-    item.setAttribute('data-roomid', room.id);
+    item.setAttribute('data-floor', f);
+    item.setAttribute('data-room', roomNameStr);
+    item.setAttribute('data-roomkey', roomKey);
     item.innerHTML =
       '<span class="room-name">' +
-      '<button type="button" class="star-btn' + (isFav ? ' fav' : '') + '" data-star="' + room.id + '">' + (isFav ? '★' : '☆') + '</button>' +
-      escapeHtml(room.room_name) + '</span><span class="type">' + escapeHtml(typeName) + '</span>';
+      '<button type="button" class="star-btn' + (isFav ? ' fav' : '') + '" data-star="' + roomKey + '">' + (isFav ? '★' : '☆') + '</button>' +
+      displayName + '</span><span class="type">' + (roomTypeName || '') + '</span>';
+
+    // 상세보기용 요일별(월~금) 트랙 마크업
+    var weekHtml = WEEKDAYS.map(function (d) {
+      return '<div class="day-row">' +
+        '<div class="day-label">' + d.label + '</div>' +
+        '<div class="track-wrap"><div class="track" data-roomkey="' + roomKey + '" data-day="' + d.key + '">' + renderTrack(roomKey, d.key) + '</div></div>' +
+        '</div>';
+    }).join('');
 
     var timelineRow = document.createElement('div');
     timelineRow.className = 'grid-body timeline-row';
-    timelineRow.setAttribute('data-floor', room.floor);
-    timelineRow.setAttribute('data-roomid', room.id);
+    timelineRow.setAttribute('data-floor', f);
+    timelineRow.setAttribute('data-room', roomNameStr);
+    timelineRow.setAttribute('data-roomkey', roomKey);
     timelineRow.innerHTML =
-      '<div class="room-tag">' + escapeHtml(room.room_name) + '</div>' +
-      '<div><div class="track-wrap compact-track"><div class="track" data-roomid="' + room.id + '">' + renderTrackHtml(room.id) + '</div></div></div>';
+      '<div class="room-tag">' + roomNameStr + '</div>' +
+      '<div>' +
+      '<div class="track-wrap compact-track"><div class="track" data-roomkey="' + roomKey + '" data-day="mon">' + renderTrack(roomKey, 'mon') + '</div></div>' +
+      '<div class="week-view">' + weekHtml + '</div>' +
+      '</div>';
 
-    item.addEventListener('click', function (e) {
-      if (e.target.closest('.star-btn')) return;
-      selectRoom(item, timelineRow, room);
-    });
+    var info = {
+      cap: room.capacity,
+      equip: equipNames && equipNames.length ? equipNames.join(', ') : '기자재 정보 없음',
+      roomType: roomTypeName || ''
+    };
+
+    var clickHandler = function (e) {
+      if (e.target.closest('.star-btn')) return; // 즐겨찾기 별 클릭 시에는 강의실 선택 동작을 하지 않음
+      selectRoom(item, timelineRow, roomNameStr, bFullName, info, roomKey);
+    };
+    item.addEventListener('click', clickHandler); // 항목 전체(여백 포함) 클릭 가능하도록 item 자체에 리스너 등록
+    // 타임라인 행 자체를 클릭해도 강의실이 선택되지 않도록 함 (좌측 목록 클릭 시에만 상세보기로 전환)
 
     return { item: item, timelineRow: timelineRow };
   }
 
-  function renderAllCompactTracks() {
-    document.querySelectorAll('.timeline-row .track').forEach(function (track) {
-      var roomId = parseInt(track.getAttribute('data-roomid'), 10);
-      track.innerHTML = renderTrackHtml(roomId);
-    });
-  }
+  // 즐겨찾기 토글 (이벤트 위임: 좌측 목록 + 상세 패널 별 버튼 공용)
+  function toggleFavorite(roomKey) {
+    favoriteRooms[roomKey] = !favoriteRooms[roomKey];
+    var isFav = !!favoriteRooms[roomKey];
 
-  function renderDetailTrack() {
-    var track = document.querySelector('.timeline-row[data-roomid="' + currentRoomId + '"] .track');
-    if (track) track.innerHTML = renderTrackHtml(currentRoomId);
-  }
-
-  /* ---------- 즐겨찾기 ---------- */
-  async function toggleFavorite(roomId) {
-    roomId = parseInt(roomId, 10);
-    var isFav = !!favoriteRoomIds[roomId];
-    if (isFav) {
-      await supabaseClient.from('favorites').delete().eq('assistant_id', CURRENT_USER.id).eq('room_id', roomId);
-      delete favoriteRoomIds[roomId];
-    } else {
-      await supabaseClient.from('favorites').insert({ assistant_id: CURRENT_USER.id, room_id: roomId });
-      favoriteRoomIds[roomId] = true;
-    }
-    var nowFav = !!favoriteRoomIds[roomId];
-    document.querySelectorAll('.star-btn[data-star="' + roomId + '"]').forEach(function (btn) {
-      btn.classList.toggle('fav', nowFav);
-      btn.textContent = nowFav ? '★' : '☆';
+    document.querySelectorAll('.star-btn[data-star="' + roomKey + '"]').forEach(function (btn) {
+      btn.classList.toggle('fav', isFav);
+      btn.textContent = isFav ? '★' : '☆';
     });
+
     var detailStar = document.getElementById('detailStarBtn');
-    if (parseInt(detailStar.getAttribute('data-roomid'), 10) === roomId) {
-      detailStar.classList.toggle('fav', nowFav);
-      detailStar.textContent = nowFav ? '★' : '☆';
+    if (detailStar.getAttribute('data-roomkey') === roomKey) {
+      detailStar.classList.toggle('fav', isFav);
+      detailStar.textContent = isFav ? '★' : '☆';
     }
+
     if (document.getElementById('favOnlyCheck').checked) applyFloorFilter();
   }
 
@@ -969,8 +1039,8 @@
   });
 
   document.getElementById('detailStarBtn').addEventListener('click', function () {
-    var roomId = this.getAttribute('data-roomid');
-    if (roomId) toggleFavorite(roomId);
+    var roomKey = this.getAttribute('data-roomkey');
+    if (roomKey) toggleFavorite(roomKey);
   });
 
   document.getElementById('favOnlyCheck').addEventListener('change', function () {
@@ -978,10 +1048,278 @@
     applyFloorFilter();
   });
 
+  document.getElementById('searchBtn').addEventListener('click', async function () {
+    if (!validateBuilding()) {
+      buildingHint.textContent = '해당 건물이 없습니다.';
+      buildingHint.className = 'none';
+      buildingInput.focus();
+      return;
+    }
+
+    var bName = buildingInput.value.trim();
+    var building = bName ? BUILDINGS_BY_NAME[bName] : null; // 건물을 입력하지 않으면 null → 전체 건물 대상 검색
+    var multiBuilding = !building;
+    currentBFullName = building ? bName : '전체 건물';
+
+    // 이용 날짜 / 시간 필터 값 읽기 (모두 선택적)
+    var filterDate = document.getElementById('filterDateInput').value; // '' 또는 'YYYY-MM-DD'
+    var filterStartVal = document.getElementById('filterStartTimeSelect').value; // '' 또는 '9'~'19'
+    var filterEndVal = document.getElementById('filterEndTimeSelect').value;
+
+    if (filterStartVal && filterEndVal && parseInt(filterStartVal, 10) >= parseInt(filterEndVal, 10)) {
+      showApplyMessage('종료 시간은 시작 시간보다 이후여야 합니다.', 'error');
+      return;
+    }
+    // 날짜/시간이 모두 지정된 경우에만 "그 시간에 이용 가능한 강의실"로 좁혀서 검색
+    var useAvailabilityFilter = !!(filterDate && filterStartVal && filterEndVal);
+
+    var searchBtnEl2 = document.getElementById('searchBtn');
+    searchBtnEl2.disabled = true;
+    searchBtnEl2.textContent = '검색 중...';
+
+    // 강의실 목록 조회 (활성화된 강의실만). 건물을 지정하지 않으면 활성화된 건물 전체를 대상으로 함.
+    var roomsQuery = supabase.from('rooms').select('*, buildings!building_id(name)').eq('is_active', true);
+    if (building) {
+      roomsQuery = roomsQuery.eq('building_id', building.id);
+    } else {
+      var activeBuildingIds = Object.keys(BUILDINGS_BY_NAME).map(function (n) { return BUILDINGS_BY_NAME[n].id; });
+      roomsQuery = roomsQuery.in('building_id', activeBuildingIds);
+    }
+    var roomsRes = await roomsQuery.order('floor').order('room_no');
+
+    if (roomsRes.error || !roomsRes.data) {
+      searchBtnEl2.disabled = false;
+      searchBtnEl2.textContent = '검색';
+      showApplyMessage('강의실 정보를 불러오지 못했습니다: ' + (roomsRes.error ? roomsRes.error.message : ''), 'error');
+      return;
+    }
+    var roomsData = roomsRes.data;
+    var roomIds = roomsData.map(function (r) { return r.id; });
+
+    // 이 강의실들의 기자재 매핑 조회 (room_id -> [기자재명])
+    var equipByRoomId = {};
+    if (roomIds.length) {
+      var reRes = await supabase
+        .from('room_equipment')
+        .select('room_id, equipment:equipment_id(name)')
+        .in('room_id', roomIds);
+      if (!reRes.error && reRes.data) {
+        reRes.data.forEach(function (row) {
+          if (!equipByRoomId[row.room_id]) equipByRoomId[row.room_id] = [];
+          if (row.equipment && row.equipment.name) equipByRoomId[row.room_id].push(row.equipment.name);
+        });
+      }
+    }
+
+    // 기자재/공간유형/인원 조건으로 클라이언트 단에서 필터링
+    var selectedEquipNames = Array.from(document.querySelectorAll('#equipGroup .toggle-chip.active')).map(function (c) { return c.getAttribute('data-val'); });
+    var selectedTypeNames = Array.from(document.querySelectorAll('#typeGroup .toggle-chip.active')).map(function (c) { return c.getAttribute('data-val'); });
+    var minCapacity = parseInt(document.getElementById('peopleRange').value, 10);
+
+    roomsData = roomsData.filter(function (room) {
+      if (room.capacity < minCapacity) return false;
+      if (selectedTypeNames.length) {
+        var typeName = ROOM_TYPE_NAME_BY_ID[room.room_type_id] || '';
+        if (selectedTypeNames.indexOf(typeName) === -1) return false;
+      }
+      if (selectedEquipNames.length) {
+        var roomEquip = equipByRoomId[room.id] || [];
+        var hasAll = selectedEquipNames.every(function (name) { return roomEquip.indexOf(name) !== -1; });
+        if (!hasAll) return false;
+      }
+      return true;
+    });
+    roomIds = roomsData.map(function (r) { return r.id; });
+
+    // 이용 날짜 + 시간이 모두 지정된 경우: 그 시간대에 정규 수업/다른 예약과 겹치는 강의실은 제외
+    if (useAvailabilityFilter && roomIds.length) {
+      var dow = new Date(filterDate + 'T00:00:00').getDay();
+      var startNum = parseInt(filterStartVal, 10);
+      var endNum = parseInt(filterEndVal, 10);
+      var busyRoomIds = {};
+
+      if (CURRENT_SEMESTER_ID != null && CURRENT_SEMESTER &&
+          !(CURRENT_SEMESTER.start_date > filterDate || CURRENT_SEMESTER.end_date < filterDate)) {
+        var csRes2 = await supabase.from('class_schedules')
+          .select('room_id, start_time, end_time')
+          .in('room_id', roomIds).eq('weekday', dow).eq('semester_id', CURRENT_SEMESTER_ID);
+        if (!csRes2.error && csRes2.data) {
+          csRes2.data.forEach(function (cs) {
+            if (timeStrToHour(cs.start_time) < endNum && timeStrToHour(cs.end_time) > startNum) busyRoomIds[cs.room_id] = true;
+          });
+        }
+      }
+
+      var bkRes3 = await supabase.from('bookings')
+        .select('room_id, start_time, end_time')
+        .in('room_id', roomIds).eq('booking_date', filterDate).in('status', ['pending', 'approved']);
+      if (!bkRes3.error && bkRes3.data) {
+        bkRes3.data.forEach(function (bk) {
+          if (timeStrToHour(bk.start_time) < endNum && timeStrToHour(bk.end_time) > startNum) busyRoomIds[bk.room_id] = true;
+        });
+      }
+
+      roomsData = roomsData.filter(function (room) { return !busyRoomIds[room.id]; });
+      roomIds = roomsData.map(function (r) { return r.id; });
+    }
+
+    // 이용 날짜를 지정한 경우, 가운데 타임라인도 그 날짜를 기준으로 표시
+    if (filterDate) {
+      var fp = filterDate.split('-').map(Number);
+      currentViewDate = new Date(fp[0], fp[1] - 1, fp[2]);
+    }
+
+    currentSearchRoomIds = roomIds;
+    window.__currentSearchRoomsData = roomsData; // 기자재/유형 정보는 재조회 없이 재사용
+    window.__currentSearchEquipByRoomId = equipByRoomId;
+    window.__currentSearchBuildingFullName = currentBFullName;
+    window.__currentSearchMultiBuilding = multiBuilding;
+
+    searchBtnEl2.disabled = false;
+    searchBtnEl2.textContent = '검색';
+
+    await renderSearchResults();
+
+    document.getElementById('filterView').style.display = 'none';
+
+    // 강제 스타일 덮어쓰기 로직 제거하고 classList 이용 (display: flex 유지를 위함)
+    document.getElementById('resultView').style.display = 'flex';
+    setCenterTitle(currentBFullName);
+
+    // 층 필터 초기화 후 전체 노출 상태로 결과 건수 표시
+    resultFloorSelect.value = "";
+    applyFloorFilter();
+  });
+
+  // 현재 검색된 강의실 목록에 대해 (현재 보고 있는 주 기준으로) class_schedules + bookings를 조회해
+  // schedulesByRoom을 다시 구성하고 결과 목록/타임라인을 다시 그림. 날짜 이동 시에도 재사용.
+  async function renderSearchResults() {
+    var roomsData = window.__currentSearchRoomsData || [];
+    var equipByRoomId = window.__currentSearchEquipByRoomId || {};
+    var bFullName = window.__currentSearchBuildingFullName || currentBFullName;
+    var roomIds = currentSearchRoomIds;
+
+    var weekDates = weekDatesFromViewDate(currentViewDate);
+    var weekDateList = WEEKDAYS.map(function (d) { return weekDates[d.key]; });
+
+    var classSchedulesByRoomId = {};
+    var bookingsByRoomId = {};
+
+    if (roomIds.length && CURRENT_SEMESTER_ID != null) {
+      var csRes = await supabase.from('class_schedules').select('*').in('room_id', roomIds).eq('semester_id', CURRENT_SEMESTER_ID);
+      if (!csRes.error && csRes.data) {
+        csRes.data.forEach(function (cs) {
+          if (!classSchedulesByRoomId[cs.room_id]) classSchedulesByRoomId[cs.room_id] = [];
+          classSchedulesByRoomId[cs.room_id].push(cs);
+        });
+      }
+
+      var bkRes = await supabase.from('bookings')
+        .select('*')
+        .in('room_id', roomIds)
+        .in('status', ['pending', 'approved'])
+        .in('booking_date', weekDateList);
+      if (!bkRes.error && bkRes.data) {
+        bkRes.data.forEach(function (bk) {
+          if (!bookingsByRoomId[bk.room_id]) bookingsByRoomId[bk.room_id] = [];
+          bookingsByRoomId[bk.room_id].push(bk);
+        });
+      }
+    }
+
+    var resultList = document.getElementById('resultList');
+    var timelineListContainer = document.getElementById('timelineListContainer');
+    var wasDetailRoomKey = detailMode ? currentRoomKey : null;
+
+    resultList.innerHTML = '';
+    timelineListContainer.innerHTML = ''; // 타임라인 컨테이너 초기화
+    schedulesByRoom = {};                  // 새로 그리기 전 스케줄 초기화
+    exitDetailMode(true);
+
+    // 그룹핑: 건물을 지정하고 검색한 경우 층별로만 묶고, 건물 없이 전체 검색한 경우
+    // 건물명이 다르면 같은 층 번호라도 섞이지 않도록 "건물+층"을 묶음 단위로 사용
+    var multiBuilding = !!window.__currentSearchMultiBuilding;
+    var groupKeys = [];
+    var roomsByGroup = {};
+    var groupMeta = {}; // key -> { floor, buildingName }
+
+    roomsData.forEach(function (room) {
+      var roomBName = (room.buildings && room.buildings.name) || bFullName;
+      var key = multiBuilding ? (room.building_id + '_' + room.floor) : String(room.floor);
+      if (!roomsByGroup[key]) {
+        roomsByGroup[key] = [];
+        groupKeys.push(key);
+        groupMeta[key] = { floor: room.floor, buildingName: roomBName };
+      }
+      roomsByGroup[key].push(room);
+    });
+
+    groupKeys.sort(function (ka, kb) {
+      var a = groupMeta[ka], b = groupMeta[kb];
+      if (multiBuilding && a.buildingName !== b.buildingName) return a.buildingName.localeCompare(b.buildingName, 'ko');
+      return a.floor - b.floor;
+    });
+
+    // 결과 내 층(그룹) 필터 셀렉트도 실제 존재하는 그룹으로 다시 채움
+    resultFloorSelect.innerHTML = '<option value="">전체' + (multiBuilding ? '' : ' 층') + '</option>' +
+      groupKeys.map(function (k) {
+        var m = groupMeta[k];
+        var label = (multiBuilding ? m.buildingName + ' ' : '') + floorLabel(m.floor);
+        return '<option value="' + k + '">' + label + '</option>';
+      }).join('');
+
+    var timelineRowByKey = {};
+    var leftItemByKey = {};
+    var infoByKey = {};
+    var roomNoByKey = {};
+    var buildingNameByKey = {};
+
+    groupKeys.forEach(function (k) {
+      var m = groupMeta[k];
+      // 왼쪽 목록 그룹 라벨
+      var groupLabelEl = document.createElement('div');
+      groupLabelEl.className = 'floor-label';
+      groupLabelEl.setAttribute('data-floor', k);
+      groupLabelEl.textContent = (multiBuilding ? m.buildingName + ' ' : '') + floorLabel(m.floor);
+      resultList.appendChild(groupLabelEl);
+
+      roomsByGroup[k].forEach(function (room) {
+        var roomKey = 'room_' + room.id;
+        schedulesByRoom[roomKey] = buildRoomWeekSchedule(room.id, classSchedulesByRoomId, bookingsByRoomId, weekDates);
+
+        var roomTypeName = ROOM_TYPE_NAME_BY_ID[room.room_type_id] || '';
+        var equipNames = equipByRoomId[room.id] || [];
+        var roomBName = (room.buildings && room.buildings.name) || bFullName;
+        var built = buildRoomRow(room, roomBName, roomTypeName, equipNames, multiBuilding);
+        built.item.setAttribute('data-floor', k);
+        built.timelineRow.setAttribute('data-floor', k);
+        resultList.appendChild(built.item);
+        timelineListContainer.appendChild(built.timelineRow);
+        timelineRowByKey[roomKey] = built.timelineRow;
+        leftItemByKey[roomKey] = built.item;
+        roomNoByKey[roomKey] = room.room_no;
+        buildingNameByKey[roomKey] = roomBName;
+        infoByKey[roomKey] = {
+          cap: room.capacity,
+          equip: equipNames.length ? equipNames.join(', ') : '기자재 정보 없음',
+          roomType: roomTypeName
+        };
+      });
+    });
+
+    applyFloorFilter();
+
+    // 날짜 이동으로 다시 그린 경우, 보고 있던 강의실의 상세보기를 유지
+    if (wasDetailRoomKey && timelineRowByKey[wasDetailRoomKey]) {
+      selectRoom(leftItemByKey[wasDetailRoomKey], timelineRowByKey[wasDetailRoomKey],
+        roomNoByKey[wasDetailRoomKey], buildingNameByKey[wasDetailRoomKey] || bFullName, infoByKey[wasDetailRoomKey], wasDetailRoomKey);
+    }
+  }
+
   /* ---------- 결과 내 층 필터 ---------- */
   var resultFloorSelect = document.getElementById('resultFloorSelect');
   resultFloorSelect.addEventListener('change', function () {
-    if (detailMode) exitDetailMode();
+    if (detailMode) exitDetailMode(); // 다른 층 필터 선택 시 상세보기 해제
     applyFloorFilter();
   });
 
@@ -990,20 +1328,24 @@
     var favOnly = document.getElementById('favOnlyCheck').checked;
     var visibleCount = 0;
 
+    // 1) 왼쪽 목록 필터링 (층 라벨 + 강의실 항목) - 층 라벨은 소속 강의실이 하나라도 보일 때만 표시
     var leftItems = document.getElementById('resultList').children;
-    var pendingLabel = null, pendingLabelHasVisible = false;
+    var pendingLabel = null;
+    var pendingLabelHasVisible = false;
     for (var i = 0; i < leftItems.length; i++) {
       var el = leftItems[i];
+
       if (el.classList.contains('floor-label')) {
         if (pendingLabel) pendingLabel.style.display = pendingLabelHasVisible ? 'block' : 'none';
         pendingLabel = el;
         pendingLabelHasVisible = false;
       } else if (el.classList.contains('room-item')) {
         var elFloor = el.getAttribute('data-floor');
-        var elRoomId = el.getAttribute('data-roomid');
+        var elRoomKey = el.getAttribute('data-roomkey');
         var floorMatch = !selectedFloor || selectedFloor === elFloor;
-        var favMatch = !favOnly || !!favoriteRoomIds[elRoomId];
+        var favMatch = !favOnly || !!favoriteRooms[elRoomKey];
         var match = floorMatch && favMatch;
+
         el.style.display = match ? 'flex' : 'none';
         if (match) { visibleCount++; pendingLabelHasVisible = true; }
       }
@@ -1012,120 +1354,114 @@
 
     document.getElementById('resultCountLabel').textContent = '검색 결과 ' + visibleCount + '건';
 
+    // 2) 가운데 타임라인 필터링 (상세보기 중이 아닐 때만 적용)
     if (!detailMode) {
       document.querySelectorAll('.timeline-row').forEach(function (row) {
         var rowFloor = row.getAttribute('data-floor');
-        var rowRoomId = row.getAttribute('data-roomid');
+        var rowRoomKey = row.getAttribute('data-roomkey');
         var floorMatch = !selectedFloor || selectedFloor === rowFloor;
-        var favMatch = !favOnly || !!favoriteRoomIds[rowRoomId];
+        var favMatch = !favOnly || !!favoriteRooms[rowRoomKey];
         row.style.display = (floorMatch && favMatch) ? 'grid' : 'none';
       });
     }
   }
 
   document.getElementById('editFilterBtn').addEventListener('click', function () {
+    // 좌측 패널만 검색 결과(방 목록) → 조건 검색 필터로 전환하고,
+    // 가운데에 보여주고 있던 스케줄(타임라인)과 상세보기는 그대로 유지한다.
     document.getElementById('filterView').style.display = 'block';
     document.getElementById('resultView').style.display = 'none';
-    document.getElementById('timelineListContainer').innerHTML = '<div style="text-align:center; padding: 40px; color:#999; font-size:13px;">왼쪽 패널에서 검색을 진행해주세요.</div>';
-    setCenterTitle('전체 보기');
-    document.getElementById('roomTitle').textContent = '강의실을 선택해주세요';
-    document.getElementById('roomMeta').textContent = '수용 인원 및 기자재 정보';
-    document.getElementById('contactBox').style.display = 'none';
-    document.getElementById('guidelineBox').style.display = 'none';
-    document.getElementById('detailStarBtn').style.display = 'none';
-    exitDetailMode(true);
   });
 
-  /* ---------- 강의실 선택 ---------- */
-  function selectRoom(leftItem, timelineRow, room) {
+  // 활성화 및 우측 상세 정보 업데이트
+  function selectRoom(leftItem, timelineRow, roomNo, bFullName, info, roomKey) {
+    // 모든 활성화 상태 초기화
     document.querySelectorAll('.room-item').forEach(function (r) { r.classList.remove('active'); });
     document.querySelectorAll('.timeline-row').forEach(function (r) { r.classList.remove('active'); });
+
+    // 클릭된 요소 활성화
     leftItem.classList.add('active');
     timelineRow.classList.add('active');
 
-    document.getElementById('roomTitle').textContent = room.room_name;
-    var equipNames = (room.room_equipment || []).map(function (re) { return re.equipment.name; });
-    document.getElementById('roomMeta').textContent = '수용 ' + room.capacity + '명' + (equipNames.length ? ' · ' + equipNames.join(', ') : '');
+    // 우측 상세 패널 업데이트
+    document.getElementById('roomTitle').textContent = bFullName + ' ' + roomNo + '호';
+    document.getElementById('roomMeta').textContent = '수용 ' + info.cap + '명 · ' + (info.roomType ? info.roomType + ' · ' : '') + info.equip;
+    renderContactBox(bFullName);
+    currentRoomKey = roomKey;
+    renderSelectedSlotsSummary(roomKey);
+    lastSelectedSlot = null;
 
-    var contactBox = document.getElementById('contactBox');
-    var dept = room.managing_dept || (currentBuildingObj && currentBuildingObj.contact_dept);
-    var phone = room.contact_phone || (currentBuildingObj && currentBuildingObj.contact_phone);
-    var email = room.contact_email || (currentBuildingObj && currentBuildingObj.contact_email);
-    if (dept || phone || email) {
-      document.getElementById('contactDept').textContent = dept || '-';
-      document.getElementById('contactPhone').textContent = phone || '-';
-      document.getElementById('contactEmail').textContent = email || '-';
-      contactBox.style.display = 'block';
-    } else {
-      contactBox.style.display = 'none';
-    }
-
-    var guidelineBox = document.getElementById('guidelineBox');
-    if (room.guideline_text) {
-      guidelineBox.textContent = room.guideline_text;
-      guidelineBox.style.display = 'block';
-    } else {
-      guidelineBox.style.display = 'none';
-    }
-
-    currentRoomId = room.id;
-    pendingSlot = null;
-    document.getElementById('selectedSlotBox').style.display = 'none';
-
-    var isFav = !!favoriteRoomIds[room.id];
+    // 즐겨찾기 별 아이콘 갱신
+    var isFav = !!favoriteRooms[roomKey];
     var detailStar = document.getElementById('detailStarBtn');
     detailStar.style.display = 'inline-block';
-    detailStar.setAttribute('data-roomid', room.id);
+    detailStar.setAttribute('data-roomkey', roomKey);
     detailStar.classList.toggle('fav', isFav);
     detailStar.textContent = isFav ? '★' : '☆';
 
-    enterDetailMode(timelineRow, room);
+    // 강의실 호수를 클릭하면 해당 강의실 스케줄만 실시간 타임라인에 크게 표시
+    enterDetailMode(timelineRow, roomKey);
   }
 
-  function enterDetailMode(timelineRow, room) {
+  function enterDetailMode(timelineRow, roomKey) {
     detailMode = true;
     document.querySelectorAll('.timeline-row').forEach(function (row) {
-      if (row === timelineRow) { row.classList.add('detail-mode'); row.style.display = 'grid'; }
-      else { row.classList.remove('detail-mode'); row.style.display = 'none'; }
+      if (row === timelineRow) {
+        row.classList.add('detail-mode');
+        row.style.display = 'grid';
+      } else {
+        row.classList.remove('detail-mode');
+        row.style.display = 'none';
+      }
     });
     document.getElementById('backToListBtn').classList.add('show');
-    setCenterTitle(room.room_name);
+    var roomLabel = timelineRow.querySelector('.room-tag').textContent;
+    setCenterTitle(roomLabel);
     document.getElementById('tooltip').textContent = defaultTooltipText();
-    renderDetailTrack();
   }
 
   function exitDetailMode(skipTitleReset) {
     detailMode = false;
     document.querySelectorAll('.timeline-row').forEach(function (row) { row.classList.remove('detail-mode'); });
     document.getElementById('backToListBtn').classList.remove('show');
-    if (!skipTitleReset && currentBuildingObj) setCenterTitle(currentBuildingObj.name);
+    if (!skipTitleReset) {
+      setCenterTitle(currentBFullName);
+    }
     document.getElementById('selectedSlotBox').style.display = 'none';
-    pendingSlot = null;
+    lastSelectedSlot = null;
     document.getElementById('tooltip').textContent = defaultTooltipText();
     applyFloorFilter();
   }
 
-  document.getElementById('backToListBtn').addEventListener('click', function () { exitDetailMode(); });
+  document.getElementById('backToListBtn').addEventListener('click', function () {
+    exitDetailMode();
+  });
 
-  /* ---------- 타임라인 호버 ---------- */
+  /* ---------- 타임라인 호버 (이벤트 위임 방식 적용) ---------- */
+  // 동적으로 생성되는 타임라인 블록들을 위해 부모 컨테이너에 이벤트 등록
   var timelineContainer = document.getElementById('timelineListContainer');
   timelineContainer.addEventListener('mouseover', function (e) {
-    if (e.target.classList.contains('busy')) document.getElementById('tooltip').textContent = e.target.getAttribute('data-info');
+    if (e.target.classList.contains('busy')) {
+      document.getElementById('tooltip').textContent = e.target.getAttribute('data-info');
+    }
   });
   timelineContainer.addEventListener('mouseout', function (e) {
-    if (e.target.classList.contains('busy')) document.getElementById('tooltip').textContent = defaultTooltipText();
+    if (e.target.classList.contains('busy')) {
+      document.getElementById('tooltip').textContent = defaultTooltipText();
+    }
   });
 
-  /* ---------- 드래그로 예약 시간대 지정 (상세보기 모드에서만, 강의실당 1개) ---------- */
+  /* ---------- 드래그 앤 드롭으로 예약 시간대 지정 (상세보기 모드에서만 동작) ---------- */
   timelineContainer.addEventListener('pointerdown', function (e) {
     var track = e.target.closest('.track');
     if (!track) return;
     var row = track.closest('.timeline-row');
-    if (!row || !row.classList.contains('detail-mode')) return;
-    if (e.target.closest('.seg')) return;
+    if (!row || !row.classList.contains('detail-mode')) return; // 상세보기 중인 강의실에서만 예약 가능
+    if (e.target.closest('.seg')) return; // 기존 블록 위에서는 드래그 시작 안 함
 
     var rect = track.getBoundingClientRect();
-    var roomId = parseInt(track.getAttribute('data-roomid'), 10);
+    var roomKey = track.getAttribute('data-roomkey');
+    var day = track.getAttribute('data-day');
     var startFrac = (e.clientX - rect.left) / rect.width;
     var startHour = snapHour(TIME_START + startFrac * (TIME_END - TIME_START));
 
@@ -1133,8 +1469,9 @@
     preview.className = 'seg preview';
     track.appendChild(preview);
 
-    dragState = { track: track, roomId: roomId, startHour: startHour, previewEl: preview, finalStart: startHour, finalEnd: startHour + SNAP };
+    dragState = { track: track, roomKey: roomKey, day: day, startHour: startHour, previewEl: preview, finalStart: startHour, finalEnd: startHour + SNAP };
     updatePreview();
+
     if (track.setPointerCapture) { try { track.setPointerCapture(e.pointerId); } catch (err) {} }
     e.preventDefault();
   });
@@ -1143,7 +1480,8 @@
     if (!dragState) return;
     var rect = dragState.track.getBoundingClientRect();
     var frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    dragState.currentHour = snapHour(TIME_START + frac * (TIME_END - TIME_START));
+    var hour = snapHour(TIME_START + frac * (TIME_END - TIME_START));
+    dragState.currentHour = hour;
     updatePreview();
   });
 
@@ -1153,86 +1491,161 @@
     var en = Math.max(dragState.startHour, dragState.currentHour !== undefined ? dragState.currentHour : dragState.startHour);
     if (en - s < SNAP) en = s + SNAP;
     en = Math.min(en, TIME_END);
-    dragState.finalStart = s; dragState.finalEnd = en;
+    dragState.finalStart = s;
+    dragState.finalEnd = en;
     dragState.previewEl.style.left = (((s - TIME_START) / (TIME_END - TIME_START)) * 100) + '%';
     dragState.previewEl.style.width = (((en - s) / (TIME_END - TIME_START)) * 100) + '%';
     dragState.previewEl.textContent = timeLabel(s) + ' - ' + timeLabel(en);
   }
 
-  function renderSelectedSlotSummary() {
+  // 바로 옆에 붙거나 겹치는 초록(예약 신청) 블록들을 하나로 합침
+  function mergeAdjacentPending(roomKey, day, touchStart, touchEnd) {
+    var blocks = schedulesByRoom[roomKey][day];
+    var others = blocks.filter(function (b) { return b.type !== 'pending'; });
+    var pendingBlocks = blocks.filter(function (b) { return b.type === 'pending'; })
+      .sort(function (a, b) { return a.start - b.start; });
+
+    var merged = [];
+    pendingBlocks.forEach(function (b) {
+      var last = merged[merged.length - 1];
+      if (last && b.start <= last.end) {
+        last.end = Math.max(last.end, b.end);
+      } else {
+        merged.push({ start: b.start, end: b.end, type: 'pending' });
+      }
+    });
+
+    schedulesByRoom[roomKey][day] = others.concat(merged);
+
+    var result = merged.filter(function (b) { return b.start <= touchStart && b.end >= touchEnd; })[0];
+    return result || { start: touchStart, end: touchEnd };
+  }
+
+  // 해당 강의실에 드래그로 선택된(초록) 시간대 전체를 요약해서 selectedSlotBox에 표시
+  function renderSelectedSlotsSummary(roomKey) {
+    var byRoom = schedulesByRoom[roomKey] || {};
+    var entries = [];
+    WEEKDAYS.forEach(function (d) {
+      (byRoom[d.key] || []).forEach(function (b) {
+        if (b.type === 'pending') entries.push({ day: d.key, start: b.start, end: b.end });
+      });
+    });
+
     var box = document.getElementById('selectedSlotBox');
-    if (!pendingSlot) { box.style.display = 'none'; document.getElementById('selectedSlotText').textContent = ''; return; }
+    if (!entries.length) {
+      box.style.display = 'none';
+      document.getElementById('selectedSlotText').textContent = '';
+      return;
+    }
+
+    var text = entries.map(function (e) {
+      return WEEKDAY_LABEL[e.day] + ' ' + timeLabel(e.start) + '~' + timeLabel(e.end);
+    }).join(', ');
     box.style.display = 'block';
-    document.getElementById('selectedSlotText').textContent = timeLabel(pendingSlot.start) + '~' + timeLabel(pendingSlot.end);
+    document.getElementById('selectedSlotText').textContent = text;
   }
 
   window.addEventListener('pointerup', function () {
     if (!dragState) return;
     var s = dragState.finalStart, en = dragState.finalEnd;
-    var roomId = dragState.roomId;
+    var roomKey = dragState.roomKey;
+    var day = dragState.day;
     var track = dragState.track;
     if (dragState.previewEl && dragState.previewEl.parentNode) track.removeChild(dragState.previewEl);
 
-    if (!hasOverlap(roomId, s, en) && (en - s) >= SNAP) {
-      pendingSlot = { start: s, end: en };
-      track.innerHTML = renderTrackHtml(roomId);
-      renderSelectedSlotSummary();
-    } else if (hasOverlap(roomId, s, en)) {
+    var dayBlocks = (schedulesByRoom[roomKey] && schedulesByRoom[roomKey][day]) || [];
+    var overlap = dayBlocks.some(function (b) { return s < b.end && en > b.start; });
+
+    if (!overlap && (en - s) >= SNAP) {
+      schedulesByRoom[roomKey][day].push({ start: s, end: en, type: 'pending' });
+      var mergedBlock = mergeAdjacentPending(roomKey, day, s, en);
+      track.innerHTML = renderTrack(roomKey, day);
+      renderSelectedSlotsSummary(roomKey);
+      lastSelectedSlot = {
+        roomKey: roomKey,
+        roomLabel: document.getElementById('roomTitle').textContent,
+        day: day, start: mergedBlock.start, end: mergedBlock.end
+      };
+    } else if (overlap) {
       document.getElementById('tooltip').textContent = '이미 예약된 시간과 겹칩니다. 다른 시간대를 선택해주세요.';
       setTimeout(function () { document.getElementById('tooltip').textContent = defaultTooltipText(); }, 2200);
     }
     dragState = null;
   });
 
-  // 초록(신청 예정) 블록 클릭 시 선택 해제 / 노란(내 신청) 블록 클릭 시 취소 모달
+  // 초록색(예약 신청) 블록을 클릭하면 즉시 취소
   timelineContainer.addEventListener('click', function (e) {
     var applied = e.target.closest('.applied');
-    if (applied) { e.stopPropagation(); openCancelAppliedModal(applied); return; }
+    if (applied) {
+      e.stopPropagation();
+      openCancelAppliedModal(applied);
+      return;
+    }
 
     var pending = e.target.closest('.pending');
     if (!pending) return;
     e.stopPropagation();
-    pendingSlot = null;
-    renderDetailTrack();
-    renderSelectedSlotSummary();
-    document.getElementById('tooltip').textContent = '선택이 취소되었습니다.';
-    setTimeout(function () { document.getElementById('tooltip').textContent = defaultTooltipText(); }, 1500);
+
+    var track = pending.closest('.track');
+    var roomKey = track.getAttribute('data-roomkey');
+    var day = track.getAttribute('data-day');
+    var start = parseFloat(pending.getAttribute('data-start'));
+    var end = parseFloat(pending.getAttribute('data-end'));
+    schedulesByRoom[roomKey][day] = (schedulesByRoom[roomKey][day] || []).filter(function (b) {
+      return !(b.type === 'pending' && b.start === start && b.end === end);
+    });
+    track.innerHTML = renderTrack(roomKey, day);
+    renderSelectedSlotsSummary(roomKey);
+    lastSelectedSlot = null;
+    document.getElementById('tooltip').textContent = '예약 신청이 취소되었습니다.';
+    setTimeout(function () { document.getElementById('tooltip').textContent = defaultTooltipText(); }, 1800);
   });
 
-  /* ---------- 대여목적 카테고리 (기타 선택 시 직접입력 노출) ---------- */
-  document.getElementById('purposeSelect').addEventListener('change', function () {
-    var customInput = document.getElementById('purposeCustom');
-    if (this.value === '기타') { customInput.classList.add('show'); customInput.focus(); }
-    else { customInput.classList.remove('show'); customInput.value = ''; }
-  });
+  // 특정 강의실의 모든 요일 트랙을 다시 그림 (신청/취소 후 갱신용)
+  function renderAllTracksForRoom(roomKey) {
+    document.querySelectorAll('.track[data-roomkey="' + roomKey + '"]').forEach(function (track) {
+      var day = track.getAttribute('data-day');
+      track.innerHTML = renderTrack(roomKey, day);
+    });
+  }
 
-  /* ---------- 인라인 메시지 ---------- */
+  /* ---------- alert() 대신 사용할 인라인 메시지 표시 함수 ---------- */
+  // 일부 미리보기/샌드박스 환경에서는 alert()/confirm()이 차단될 수 있으므로,
+  // 결과를 항상 화면에 보이는 인라인 박스로 표시한다.
   var applyMsgTimer = null;
   function showApplyMessage(text, type) {
     var box = document.getElementById('applyMessageBox');
     clearTimeout(applyMsgTimer);
     box.textContent = text;
     box.style.display = 'block';
-    if (type === 'error') { box.style.background = '#FBEEEE'; box.style.color = '#A33'; box.style.border = '1px solid #E0A0A0'; }
-    else { box.style.background = '#E6F3EB'; box.style.color = '#2C7A4B'; box.style.border = '1px solid #2C7A4B'; }
+    if (type === 'error') {
+      box.style.background = '#FBEEEE';
+      box.style.color = '#A33';
+      box.style.border = '1px solid #E0A0A0';
+    } else {
+      box.style.background = '#E6F3EB';
+      box.style.color = '#2C7A4B';
+      box.style.border = '1px solid #2C7A4B';
+    }
     applyMsgTimer = setTimeout(function () { box.style.display = 'none'; }, 4000);
   }
 
-  /* ---------- 일일 대여 신청 ---------- */
+  /* ---------- 일일 대여 신청 (확인 모달 → 신청 → 노란색 표시) ---------- */
   var dailyApplyModalOverlay = document.getElementById('dailyApplyModalOverlay');
   var cancelAppliedModalOverlay = document.getElementById('cancelAppliedModalOverlay');
-  var pendingCancelBookingId = null;
+  var pendingCancelTarget = null; // { roomKey, day, start, end }
 
   document.getElementById('dailyApplyBtn').addEventListener('click', function () {
-    if (!pendingSlot) {
+    var slotBox = document.getElementById('selectedSlotBox');
+    if (slotBox.style.display === 'none') {
       showApplyMessage('먼저 강의실 상세보기에서 예약할 시간대를 드래그로 선택해주세요.', 'error');
       return;
     }
-    var purpose = document.getElementById('purposeSelect').value === '기타'
-      ? document.getElementById('purposeCustom').value
-      : document.getElementById('purposeSelect').value;
-    var desc = document.getElementById('roomTitle').textContent + '<br>날짜: ' + getDateLabel() +
-      '<br>선택 시간대: ' + document.getElementById('selectedSlotText').textContent +
+
+    var purpose = document.getElementById('purposeInput').value.trim();
+
+    var desc = document.getElementById('roomTitle').textContent + '<br>선택 시간대: ' +
+      document.getElementById('selectedSlotText').textContent +
       (purpose ? ('<br>대여목적: ' + purpose) : '');
     document.getElementById('dailyApplyModalDesc').innerHTML = desc;
     dailyApplyModalOverlay.classList.add('show');
@@ -1243,68 +1656,222 @@
   });
 
   document.getElementById('dailyApplyModalConfirmBtn').addEventListener('click', async function () {
-    if (!currentRoomId || !pendingSlot) { dailyApplyModalOverlay.classList.remove('show'); return; }
-
-    var purposeSelect = document.getElementById('purposeSelect').value;
-    var purpose = purposeSelect === '기타' ? document.getElementById('purposeCustom').value : purposeSelect;
-    var headcount = parseInt(document.getElementById('headcountInput').value, 10);
-
-    if (!purpose) { showApplyMessage('대여목적을 선택(또는 입력)해주세요.', 'error'); dailyApplyModalOverlay.classList.remove('show'); return; }
-    if (!headcount || headcount < 1) { showApplyMessage('이용인원을 입력해주세요.', 'error'); dailyApplyModalOverlay.classList.remove('show'); return; }
-
-    var confirmBtn = document.getElementById('dailyApplyModalConfirmBtn');
-    confirmBtn.disabled = true;
-
-    var insertRes = await supabaseClient.from('bookings').insert({
-      room_id: currentRoomId,
-      date: formatDateISO(currentViewDate),
-      start_time: hourToTimeStr(pendingSlot.start),
-      end_time: hourToTimeStr(pendingSlot.end),
-      purpose: purpose,
-      headcount: headcount,
-      requester_id: CURRENT_USER.id
-    });
-
-    confirmBtn.disabled = false;
-    dailyApplyModalOverlay.classList.remove('show');
-
-    if (insertRes.error) {
-      showApplyMessage('신청에 실패했습니다: ' + (insertRes.error.message.indexOf('overlap') !== -1 || insertRes.error.code === '23P01' ? '이미 예약된 시간대입니다.' : insertRes.error.message), 'error');
-      await refreshScheduleData();
-      renderDetailTrack();
+    var roomKey = currentRoomKey;
+    if (!roomKey || !schedulesByRoom[roomKey]) {
+      dailyApplyModalOverlay.classList.remove('show');
+      return;
+    }
+    if (!currentAssistant) {
+      showApplyMessage('로그인 정보를 확인할 수 없습니다. 다시 로그인해주세요.', 'error');
+      dailyApplyModalOverlay.classList.remove('show');
       return;
     }
 
-    var slotText = document.getElementById('selectedSlotText').textContent;
-    pendingSlot = null;
-    document.getElementById('selectedSlotBox').style.display = 'none';
-    await refreshScheduleData();
-    renderDetailTrack();
-    showApplyMessage('일일 대여 신청이 완료되었습니다.\n선택 시간대: ' + slotText + '\n대여목적: ' + purpose + '\n(담당 중간관리자 승인 후 확정됩니다)', 'success');
+    var purpose = document.getElementById('purposeInput').value.trim();
+
+    var selectedSlotText = document.getElementById('selectedSlotText').textContent;
+    var roomId = parseInt(roomKey.replace('room_', ''), 10);
+    var weekDates = weekDatesFromViewDate(currentViewDate);
+    var headcountVal = parseInt(document.getElementById('headcountInput').value, 10);
+    var headcount = (!isNaN(headcountVal) && headcountVal > 0) ? headcountVal : null;
+
+    // 이 강의실의 pending(드래그로 선택된, 아직 DB에 없는) 블록들을 bookings에 insert
+    var rows = [];
+    WEEKDAYS.forEach(function (d) {
+      var blocks = schedulesByRoom[roomKey][d.key] || [];
+      blocks.forEach(function (b) {
+        if (b.type !== 'pending') return;
+        rows.push({
+          room_id: roomId,
+          booking_date: weekDates[d.key],
+          start_time: hourToTimeStr(b.start),
+          end_time: hourToTimeStr(b.end),
+          purpose: purpose || null,
+          headcount: headcount,
+          requester_id: currentAssistant.id,
+          status: 'pending'
+        });
+      });
+    });
+
+    if (!rows.length) {
+      dailyApplyModalOverlay.classList.remove('show');
+      return;
+    }
+
+    var insertRes = await supabase.from('bookings').insert(rows);
+    dailyApplyModalOverlay.classList.remove('show');
+
+    if (insertRes.error) {
+      showApplyMessage('신청에 실패했습니다: ' + insertRes.error.message, 'error');
+      return;
+    }
+
+    await renderSearchResults(); // 방금 넣은 신청건을 실제 DB 기준으로 다시 불러와 승인대기(노란색)로 표시
+    showApplyMessage('일일 대여 신청이 완료되었습니다. 담당 중간관리자 승인 후 확정됩니다.\n선택 시간대: ' + selectedSlotText + (purpose ? ('\n대여목적: ' + purpose) : ''), 'success');
   });
 
-  /* ---------- 내 신청(노란) 블록 클릭 → 취소 확인 모달 ---------- */
+  /* ---------- 신청 완료(노란색) 블록 클릭 → 취소 확인 모달 ---------- */
   function openCancelAppliedModal(appliedEl) {
-    pendingCancelBookingId = appliedEl.getAttribute('data-booking-id');
-    document.getElementById('cancelAppliedModalDesc').innerHTML = '이 예약 신청을 취소합니다.';
+    var track = appliedEl.closest('.track');
+    var roomKey = track.getAttribute('data-roomkey');
+    var day = track.getAttribute('data-day');
+    var start = parseFloat(appliedEl.getAttribute('data-start'));
+    var end = parseFloat(appliedEl.getAttribute('data-end'));
+    var bookingId = appliedEl.getAttribute('data-booking-id');
+    var requesterId = appliedEl.getAttribute('data-requester-id');
+
+    if (!currentAssistant || requesterId !== currentAssistant.id) {
+      showApplyMessage('본인이 신청한 예약만 취소할 수 있습니다.', 'error');
+      return;
+    }
+
+    pendingCancelTarget = { roomKey: roomKey, day: day, start: start, end: end, bookingId: bookingId };
+
+    document.getElementById('cancelAppliedModalDesc').innerHTML =
+      WEEKDAY_LABEL[day] + ' ' + timeLabel(start) + '~' + timeLabel(end) + ' 신청 건을 취소합니다.';
     cancelAppliedModalOverlay.classList.add('show');
   }
 
   document.getElementById('cancelAppliedModalCancelBtn').addEventListener('click', function () {
-    pendingCancelBookingId = null;
+    pendingCancelTarget = null;
     cancelAppliedModalOverlay.classList.remove('show');
   });
 
   document.getElementById('cancelAppliedModalConfirmBtn').addEventListener('click', async function () {
-    if (!pendingCancelBookingId) { cancelAppliedModalOverlay.classList.remove('show'); return; }
-    var res = await supabaseClient.from('bookings').update({ status: 'cancelled' }).eq('id', pendingCancelBookingId);
-    pendingCancelBookingId = null;
+    if (!pendingCancelTarget) {
+      cancelAppliedModalOverlay.classList.remove('show');
+      return;
+    }
+    var t = pendingCancelTarget;
+
+    // 본인이 신청한 예약을 본인이 취소하는 것이므로(관리자 거절이 아님) 이력 남길 필요 없이 바로 삭제
+    var updateRes = await supabase.from('bookings').delete().eq('id', t.bookingId);
     cancelAppliedModalOverlay.classList.remove('show');
-    if (res.error) { showApplyMessage('취소에 실패했습니다: ' + res.error.message, 'error'); return; }
-    await refreshScheduleData();
-    if (detailMode) renderDetailTrack(); else renderAllCompactTracks();
+    pendingCancelTarget = null;
+
+    if (updateRes.error) {
+      showApplyMessage('취소에 실패했습니다: ' + updateRes.error.message, 'error');
+      return;
+    }
+
+    await renderSearchResults();
     showApplyMessage('신청이 취소되었습니다.', 'success');
   });
+
+  /* ---------- 문의하기 (중간관리자에게 문의 등록) ---------- */
+  var inquiryModalOverlay = document.getElementById('inquiryModalOverlay');
+  var inquiryCategoryGroup = document.getElementById('inquiryCategoryGroup');
+  var inquiryContentInput = document.getElementById('inquiryContentInput');
+  var inquiryErrorBox = document.getElementById('inquiryErrorBox');
+  var inquirySuccessBox = document.getElementById('inquirySuccessBox');
+  var inquirySubmitBtn = document.getElementById('inquirySubmitBtn');
+  var selectedInquiryCategory = null;
+
+  // 문의 유형별로 자주 쓰는 문구를 기본으로 채워줘서 쉽게 작성할 수 있게 하고,
+  // 사용자가 그 내용을 자유롭게 수정하거나 완전히 새로 쓸 수도 있음
+  var INQUIRY_TEMPLATES = {
+    '예약/취소 문의': '예약/취소 관련하여 문의드립니다.\n- 강의실: \n- 이용 날짜/시간: \n- 문의 내용: ',
+    '강의실 시설·기자재 문의': '강의실 시설 또는 기자재 관련하여 문의드립니다.\n- 강의실: \n- 문제/문의 내용: ',
+    '계정/로그인 문의': '계정 또는 로그인 관련하여 문의드립니다.\n- 문의 내용: ',
+    '건의사항': '서비스 이용과 관련해 아래와 같이 건의드립니다.\n- 건의 내용: ',
+    '기타': ''
+  };
+
+  function hideInquiryError() { inquiryErrorBox.style.display = 'none'; inquiryErrorBox.textContent = ''; }
+  function showInquiryError(text) { inquiryErrorBox.textContent = text; inquiryErrorBox.style.display = 'block'; }
+
+  function resetInquiryModal() {
+    selectedInquiryCategory = null;
+    inquiryCategoryGroup.querySelectorAll('.toggle-chip').forEach(function (c) { c.classList.remove('active'); });
+    inquiryContentInput.value = '';
+    inquiryContentInput.disabled = false;
+    hideInquiryError();
+    inquirySuccessBox.style.display = 'none';
+    inquirySubmitBtn.style.display = '';
+    inquirySubmitBtn.disabled = false;
+    inquirySubmitBtn.textContent = '문의 등록';
+  }
+
+  document.getElementById('inquiryOpenBtn').addEventListener('click', function () {
+    resetInquiryModal();
+    inquiryModalOverlay.classList.add('show');
+  });
+
+  document.getElementById('inquiryModalCancelBtn').addEventListener('click', function () {
+    inquiryModalOverlay.classList.remove('show');
+  });
+
+  inquiryCategoryGroup.addEventListener('click', function (e) {
+    var chip = e.target.closest('.toggle-chip');
+    if (!chip) return;
+    var val = chip.getAttribute('data-val');
+    var wasActive = chip.classList.contains('active');
+
+    inquiryCategoryGroup.querySelectorAll('.toggle-chip').forEach(function (c) { c.classList.remove('active'); });
+
+    if (wasActive) {
+      // 같은 유형을 다시 누르면 선택 해제 (자유 작성 모드로)
+      selectedInquiryCategory = null;
+      return;
+    }
+    chip.classList.add('active');
+    selectedInquiryCategory = val;
+
+    // 내용이 비어있거나, 다른 유형의 기본 문구 그대로일 때만 새 기본 문구로 바꿔줌
+    // (사용자가 이미 직접 입력한 내용은 덮어쓰지 않음)
+    var currentVal = inquiryContentInput.value;
+    var isKnownTemplate = Object.keys(INQUIRY_TEMPLATES).some(function (k) { return INQUIRY_TEMPLATES[k] === currentVal; });
+    if (!currentVal.trim() || isKnownTemplate) {
+      inquiryContentInput.value = INQUIRY_TEMPLATES[val] || '';
+    }
+  });
+
+  inquirySubmitBtn.addEventListener('click', async function () {
+    hideInquiryError();
+    var content = inquiryContentInput.value.trim();
+    if (!content) { showInquiryError('문의 내용을 입력해주세요.'); return; }
+
+    inquirySubmitBtn.disabled = true;
+    inquirySubmitBtn.textContent = '등록 중...';
+
+    var insertRes = await supabase.from('inquiries').insert([{
+      requester_id: currentAssistant.id,
+      category: selectedInquiryCategory || '기타',
+      content: content,
+      status: 'pending'
+    }]);
+
+    if (insertRes.error) {
+      inquirySubmitBtn.disabled = false;
+      inquirySubmitBtn.textContent = '문의 등록';
+      showInquiryError('문의 등록에 실패했습니다: ' + insertRes.error.message);
+      return;
+    }
+
+    inquiryContentInput.disabled = true;
+    inquirySubmitBtn.style.display = 'none';
+    inquirySuccessBox.textContent = '문의가 정상적으로 등록되었습니다. 담당 중간관리자가 확인 후 답변드릴 예정입니다.';
+    inquirySuccessBox.style.display = 'block';
+
+    setTimeout(function () {
+      inquiryModalOverlay.classList.remove('show');
+    }, 1800);
+  });
+
+  /* ---------- 로그아웃 ---------- */
+  document.getElementById('logoutLink').addEventListener('click', async function (e) {
+    e.preventDefault();
+    await supabase.auth.signOut();
+    window.location.href = 'login.html';
+  });
+
+  /* ---------- 페이지 로드 시 로그인 확인 후 DB에서 건물/기자재/공간유형 불러오기 ---------- */
+  (async function init() {
+    var ok = await requireSessionAndLoadAssistant();
+    if (!ok) return; // 로그인 안 돼있으면 login.html로 이동됨
+    await fetchAppData();
+  })();
 </script>
 
 </body>
