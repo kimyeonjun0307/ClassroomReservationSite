@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>마이페이지 · 동서대학교 공간 예약 시스템</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --primary: #B91C1C; --primary-dark: #7F1010; --primary-light: #D64545;
+    --accent-bg: #FBEAEA; --accent-text: #8A1616;
+    --success: #12805C; --success-bg: #E6F6EF; --success-border: #7FD1AC;
+    --warning: #B7791F; --warning-bg: #FDF3E2; --warning-border: #F0CE8C;
+    --danger: #C13A3A; --danger-bg: #FCEBEB; --danger-border: #F0AFAF;
+    --gray-900: #1A1D23; --gray-700: #454B54; --gray-500: #767D89;
+    --gray-300: #D8DCE2; --gray-200: #E7E9ED; --gray-100: #F1F3F6; --gray-50: #F8F9FB;
+    --border: #E4E7EC;
+    --shadow-sm: 0 1px 3px rgba(16,24,40,0.06);
+    --shadow-md: 0 6px 20px rgba(16,24,40,0.09);
+    --radius-md: 14px; --radius-lg: 18px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Pretendard", -apple-system, "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+    background: var(--gray-50);
+    color: var(--gray-900);
+  }
+
+  header {
+    background: var(--primary);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 36px;
+  }
+  header .logo { font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 9px; letter-spacing: -0.2px; }
+  header .user-info { display: flex; align-items: center; gap: 13px; font-size: 14px; color: rgba(255,255,255,0.85); }
+  header .user-info .divider { opacity: 0.4; }
+  header .user-info .logout { cursor: pointer; transition: opacity .12s; }
+  header .user-info .logout:hover { opacity: 0.75; }
+
+  main { max-width: 1400px; margin: 0 auto; padding: 44px 32px; }
+
+  h1 { font-size: 28px; font-weight: 700; margin-bottom: 8px; letter-spacing: -0.4px; }
+  .subtitle { color: var(--gray-500); font-size: 14.5px; margin-bottom: 30px; }
+
+  .summary-cards { display: flex; gap: 18px; margin-bottom: 32px; }
+  .card {
+    flex: 1; background: #fff; border-radius: var(--radius-lg); padding: 22px 22px;
+    display: flex; align-items: center; gap: 16px; box-shadow: var(--shadow-sm);
+  }
+  .icon-circle {
+    width: 46px; height: 46px; border-radius: 13px; display: flex; align-items: center; justify-content: center;
+    font-size: 20px; flex-shrink: 0; color: #fff;
+  }
+  .icon-approved { background: var(--success); }
+  .icon-pending { background: var(--warning); }
+  .icon-rejected { background: var(--danger); }
+  .icon-done { background: #5B5FEA; }
+
+  .card-label { font-size: 13.5px; color: var(--gray-500); margin-bottom: 4px; font-weight: 500; }
+  .card-count { font-size: 24px; font-weight: 700; letter-spacing: -0.3px; }
+
+  table {
+    width: 100%; border-collapse: collapse; background: #fff; border-radius: var(--radius-lg);
+    overflow: hidden; box-shadow: var(--shadow-sm);
+  }
+  thead { background: var(--gray-50); }
+  th { text-align: center; padding: 15px 12px; font-size: 13px; font-weight: 700; color: var(--gray-700); border-bottom: 1px solid var(--border); }
+  td { text-align: center; padding: 17px 14px; font-size: 13.5px; border-bottom: 1px solid var(--gray-100); color: var(--gray-700); vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: none; }
+  td.space-name { font-weight: 700; color: var(--gray-900); }
+  td.reason { text-align: left; }
+  td.reason .warn { color: var(--danger); }
+
+  .status { display: inline-block; padding: 6px 14px; border-radius: 100px; font-size: 12.5px; font-weight: 700; }
+  .status-pending { background: var(--warning-bg); color: var(--warning); }
+  .status-approved { background: var(--success-bg); color: var(--success); }
+  .status-rejected { background: var(--danger-bg); color: var(--danger); }
+  .status-done { background: var(--gray-100); color: var(--gray-500); }
+  .status-canceled { background: var(--gray-100); color: var(--gray-500); }
+
+  .btn-cancel {
+    background: #fff; border: 1.5px solid var(--danger-border); color: var(--danger);
+    font-size: 12px; font-weight: 700; padding: 7px 14px; border-radius: 8px; cursor: pointer; transition: background .12s;
+  }
+  .btn-cancel:hover { background: var(--danger-bg); }
+  .cell-canceled { color: var(--gray-300); font-size: 13px; }
+  .cell-dash { color: var(--gray-300); }
+
+  .action-cell { display: flex; flex-direction: column; gap: 6px; align-items: center; }
+  .btn-rebook {
+    background: #fff; border: 1.5px solid var(--primary-light); color: var(--primary);
+    font-size: 12px; font-weight: 700; padding: 7px 14px; border-radius: 8px; cursor: pointer; transition: background .12s;
+  }
+  .btn-rebook:hover { background: var(--accent-bg); }
+
+  /* 재예약 모달 */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(90,15,15,.5);
+    align-items: center; justify-content: center; z-index: 50; padding: 20px;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal-box { background: #fff; border-radius: var(--radius-md); padding: 24px; width: 360px; max-width: 100%; box-shadow: 0 20px 50px rgba(90,15,15,0.28); }
+  .modal-title { font-size: 15.5px; font-weight: 700; color: var(--gray-900); margin-bottom: 6px; }
+  .modal-desc { font-size: 12.5px; color: var(--gray-500); line-height: 1.6; margin-bottom: 16px; }
+  .modal-field { margin-bottom: 14px; }
+  .modal-field label { display: block; font-size: 12.5px; font-weight: 600; color: var(--gray-700); margin-bottom: 6px; }
+  .modal-field input[type="date"], .modal-field input[type="text"] {
+    width: 100%; height: 38px; border: 1.5px solid var(--gray-200); border-radius: 8px; padding: 0 12px;
+    font-size: 13px; font-family: inherit; background: var(--gray-50); color: var(--gray-900);
+  }
+  .modal-field input:focus { outline: none; border-color: var(--primary-light); background: #fff; }
+  .modal-time-row { display: flex; gap: 8px; }
+  .modal-time-row select {
+    flex: 1; height: 38px; border: 1.5px solid var(--gray-200); border-radius: 8px; padding: 0 10px;
+    font-size: 13px; font-family: inherit; background: var(--gray-50); color: var(--gray-900);
+  }
+  .modal-time-row select:focus { outline: none; border-color: var(--primary-light); background: #fff; }
+  .modal-error-box {
+    display: none; background: var(--danger-bg); color: var(--danger); border: 1px solid var(--danger-border);
+    border-radius: 8px; padding: 9px 12px; font-size: 12.5px; margin-bottom: 14px; line-height: 1.6; white-space: pre-line;
+  }
+  .modal-actions { display: flex; gap: 8px; }
+  .modal-btn-cancel, .modal-btn-confirm { flex: 1; height: 42px; border-radius: 8px; font-size: 13.5px; font-weight: 700; cursor: pointer; border: none; transition: background .12s; }
+  .modal-btn-cancel { background: #fff; border: 1.5px solid var(--gray-200); color: var(--gray-700); }
+  .modal-btn-cancel:hover { background: var(--gray-50); }
+  .modal-btn-confirm { background: var(--primary); color: #fff; }
+  .modal-btn-confirm:hover { background: var(--primary-dark); }
+  .modal-btn-confirm:disabled { background: var(--gray-300); cursor: not-allowed; }
+
+  .page-message-box {
+    display: none; margin-bottom: 20px; padding: 12px 16px; border-radius: var(--radius-md);
+    font-size: 13px; line-height: 1.5; white-space: pre-line;
+  }
+
+  .logo { cursor: pointer; }
+
+  .card { cursor: pointer; border: 2px solid transparent; transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease; }
+  .card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
+  .card.active { border-color: var(--primary); }
+
+  .filter-banner {
+    display: none; align-items: center; justify-content: space-between;
+    background: var(--accent-bg); border: 1px solid #C7DAF2; color: var(--accent-text);
+    border-radius: var(--radius-md); padding: 13px 20px; margin-bottom: 20px; font-size: 13.5px;
+  }
+  .filter-banner.show { display: flex; }
+  .filter-banner button { background: var(--primary); color: #fff; border: none; border-radius: 8px; padding: 7px 14px; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+
+  tr.hidden-row { display: none; }
+  .empty-row td { padding: 44px; color: var(--gray-300); font-size: 14px; }
+
+  .profile-card {
+    background: #fff; border-radius: var(--radius-lg); padding: 28px 32px; margin-bottom: 32px;
+    box-shadow: var(--shadow-sm); display: flex; align-items: center; gap: 28px;
+  }
+  .profile-avatar {
+    width: 70px; height: 70px; border-radius: 20px; background: var(--primary); color: #fff;
+    font-size: 24px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .profile-main { flex: 1; }
+  .profile-name-row { display: flex; align-items: center; gap: 10px; margin-bottom: 5px; }
+  .profile-name { font-size: 19px; font-weight: 700; color: var(--gray-900); letter-spacing: -0.3px; }
+  .profile-role-badge { background: var(--accent-bg); color: var(--accent-text); font-size: 11.5px; font-weight: 700; padding: 3px 11px; border-radius: 100px; }
+  .profile-dept { color: var(--gray-500); font-size: 13.5px; margin-bottom: 16px; }
+  .profile-details { display: grid; grid-template-columns: repeat(2, 1fr); gap: 13px 32px; }
+  .detail-item { display: flex; flex-direction: column; gap: 3px; }
+  .detail-label { font-size: 11.5px; color: var(--gray-300); }
+  .detail-value { font-size: 13.5px; color: var(--gray-700); font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .pw-toggle { background: none; border: none; color: var(--primary); font-size: 12px; cursor: pointer; text-decoration: underline; padding: 0; }
+  .profile-edit-btn {
+    align-self: flex-start; background: #fff; border: 1.5px solid var(--gray-200); color: var(--gray-700);
+    padding: 9px 17px; border-radius: 10px; font-size: 12.5px; font-weight: 600; cursor: pointer; flex-shrink: 0; transition: all .12s;
+  }
+  .profile-edit-btn:hover { background: var(--gray-50); border-color: var(--primary-light); }
+
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo" onclick="mainback()">🏫 동서대학교 강의실 예약</div>
+  <div class="user-info">
+    <span id="headerUserInfo">👤 -</span>
+    <span class="divider">|</span>
+    <span class="logout" onclick="logout()">로그아웃</span>
+  </div>
+</header>
+
+<main>
+  <h1>마이페이지</h1>
+  <p class="subtitle">나의 공간 대여 현황 및 승인 결과를 확인하실 수 있습니다.</p>
+
+  <div class="profile-card">
+    <div class="profile-main">
+      <div class="profile-name-row">
+        <span class="profile-name" id="profileName">-</span>
+      </div>
+      <div class="profile-dept" id="profileDept">-</div>
+      <div class="profile-details">
+        <div class="detail-item">
+          <span class="detail-label">이메일</span>
+          <span class="detail-value" id="profileEmail">-</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">연락처</span>
+          <span class="detail-value" id="profilePhone">-</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">소속</span>
+          <span class="detail-value" id="profileDept2">-</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">역할</span>
+          <span class="detail-value" id="profileRole">-</span>
+        </div>
+      </div>
+    </div>
+    <button class="profile-edit-btn" onclick="alert('회원정보 수정 기능은 아직 준비 중입니다.')">회원정보 수정</button>
+  </div>
+
+  <div class="summary-cards">
+    <div class="card" id="card-approved" onclick="filterByStatus('approved', '승인 완료')">
+      <div class="icon-circle icon-approved">✓</div>
+      <div>
+        <div class="card-label">승인 완료</div>
+        <div class="card-count" id="count-approved">0건</div>
+      </div>
+    </div>
+    <div class="card" id="card-pending" onclick="filterByStatus('pending', '승인 대기')">
+      <div class="icon-circle icon-pending">🕐</div>
+      <div>
+        <div class="card-label">승인 대기</div>
+        <div class="card-count" id="count-pending">0건</div>
+      </div>
+    </div>
+    <div class="card" id="card-rejected" onclick="filterByStatus('rejected', '승인 거절')">
+      <div class="icon-circle icon-rejected">✕</div>
+      <div>
+        <div class="card-label">승인 거절</div>
+        <div class="card-count" id="count-rejected">0건</div>
+      </div>
+    </div>
+    <div class="card" id="card-done" onclick="filterByStatus('done', '이용 내역')">
+      <div class="icon-circle icon-done">📁</div>
+      <div>
+        <div class="card-label">이용 내역</div>
+        <div class="card-count" id="count-done">0건</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="filter-banner" id="filterBanner">
+    <span id="filterBannerText"></span>
+    <button onclick="showAll()">전체 보기</button>
+  </div>
+
+  <div class="page-message-box" id="pageMessageBox"></div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>예약 공간</th>
+        <th>이용 일시</th>
+        <th>대여 목적</th>
+        <th>상태</th>
+        <th>관리자 메모 / 거절 사유</th>
+        <th>예약 취소</th>
+        <th>재예약</th>
+      </tr>
+    </thead>
+    <tbody id="bookingTbody"></tbody>
+  </table>
+</main>
+
+<!-- 재예약 확인 모달 -->
+<div class="modal-overlay" id="rebookModalOverlay">
+  <div class="modal-box">
+    <div class="modal-title">같은 강의실로 재예약</div>
+    <div class="modal-desc" id="rebookModalDesc"></div>
+    <div class="modal-field">
+      <label>예약 날짜</label>
+      <input type="date" id="rebookDateInput">
+    </div>
+    <div class="modal-field">
+      <label>이용 시간</label>
+      <div class="modal-time-row">
+        <select id="rebookStartTimeSelect"></select>
+        <select id="rebookEndTimeSelect"></select>
+      </div>
+    </div>
+    <div class="modal-field">
+      <label>대여 목적</label>
+      <input type="text" id="rebookPurposeInput" placeholder="대여 목적을 입력하세요">
+    </div>
+    <div class="modal-error-box" id="rebookErrorBox"></div>
+    <div class="modal-actions">
+      <button type="button" class="modal-btn-cancel" id="rebookModalCancelBtn">취소</button>
+      <button type="button" class="modal-btn-confirm" id="rebookModalConfirmBtn">재예약 신청</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // TODO: login.html과 동일한 Supabase 프로젝트 정보로 교체
+  var SUPABASE_URL = 'https://yclrlgcixldovbhygjrc.supabase.co';
+  var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InljbHJsZ2NpeGxkb3ZiaHlnanJjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY2NzI2NTUsImV4cCI6MjEwMjI0ODY1NX0.hk2FB9D45QcGxFXPeNwNENcBusuOnLeakKNqA3gFtmo';
+  var supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  async function logout() {
+    await supabase.auth.signOut();
+    window.location.href = 'login.html';
+  }
+
+  var currentUser = null; // { id, name, role, department_id }
+  var MY_BOOKINGS = [];   // bookings row + room/building 조인
+
+  var STATUS_LABEL = { pending: '승인 대기', approved: '승인 완료', rejected: '승인 거절', cancelled: '취소됨', done: '이용 완료' };
+  var STATUS_CLASS = { pending: 'status-pending', approved: 'status-approved', rejected: 'status-rejected', cancelled: 'status-canceled', done: 'status-done' };
+
+  var cards = {
+    approved: document.getElementById('card-approved'),
+    pending: document.getElementById('card-pending'),
+    rejected: document.getElementById('card-rejected'),
+    done: document.getElementById('card-done')
+  };
+  var banner = document.getElementById('filterBanner');
+  var bannerText = document.getElementById('filterBannerText');
+  var currentFilterStatus = '';
+
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+  function timeShort(t) { return String(t).slice(0, 5); }
+  var WEEKDAY_KOR = ['일', '월', '화', '수', '목', '금', '토'];
+  function formatBookingDate(dateStr) {
+    var d = new Date(dateStr + 'T00:00:00');
+    var dow = WEEKDAY_KOR[d.getDay()];
+    return dateStr + ' (' + dow + ')';
+  }
+  function dateToISO(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+
+  // class_schedules.weekday 규칙: 일=0, 월=1 ... 토=6 (JS Date.getDay()와 동일, index.html과 동일 규칙)
+  var CURRENT_SEMESTER = null;
+  var CURRENT_SEMESTER_ID = null;
+  async function loadCurrentSemester() {
+    var semRes = await supabase.from('semesters').select('id, start_date, end_date').eq('is_current', true).limit(1).maybeSingle();
+    CURRENT_SEMESTER = (!semRes.error && semRes.data) ? semRes.data : null;
+    CURRENT_SEMESTER_ID = CURRENT_SEMESTER ? CURRENT_SEMESTER.id : null;
+  }
+
+  function showPageMessage(text, type) {
+    var box = document.getElementById('pageMessageBox');
+    box.textContent = text;
+    box.style.display = 'block';
+    if (type === 'error') {
+      box.style.background = 'var(--danger-bg)'; box.style.color = 'var(--danger)'; box.style.border = '1px solid var(--danger-border)';
+    } else {
+      box.style.background = 'var(--success-bg)'; box.style.color = 'var(--success)'; box.style.border = '1px solid var(--success-border)';
+    }
+    clearTimeout(showPageMessage._t);
+    showPageMessage._t = setTimeout(function () { box.style.display = 'none'; }, 4500);
+  }
+
+  async function requireSessionAndLoadUser() {
+    var sessionRes = await supabase.auth.getSession();
+    if (!sessionRes.data.session) { window.location.href = 'login.html'; return false; }
+
+    var profileRes = await supabase.from('users').select('id, name, role, department_id, phone, departments(name)').eq('id', sessionRes.data.session.user.id).single();
+    if (profileRes.error || !profileRes.data) { window.location.href = 'login.html'; return false; }
+
+    currentUser = profileRes.data;
+    currentUser.email = sessionRes.data.session.user.email || '-';
+    currentUser.deptName = (profileRes.data.departments && profileRes.data.departments.name) || '-';
+    return true;
+  }
+
+  var ROLE_LABEL = { assistant: '예약자(조교)', mid_admin: '중간관리자', final_admin: '최종관리자' };
+
+  function renderProfile() {
+    document.getElementById('headerUserInfo').textContent = '👤 ' + currentUser.name + ' (' + currentUser.deptName + ')';
+    document.getElementById('profileName').textContent = currentUser.name;
+    document.getElementById('profileDept').textContent = currentUser.deptName;
+    document.getElementById('profileDept2').textContent = currentUser.deptName;
+    document.getElementById('profileEmail').textContent = currentUser.email;
+    document.getElementById('profilePhone').textContent = currentUser.phone || '-';
+    document.getElementById('profileRole').textContent = ROLE_LABEL[currentUser.role] || currentUser.role;
+  }
+
+  async function loadMyBookings() {
+    var res = await supabase
+      .from('bookings')
+      .select('*, rooms(room_no, buildings!building_id(name))')
+      .eq('requester_id', currentUser.id)
+      .order('booking_date', { ascending: false });
+    MY_BOOKINGS = (!res.error && res.data) ? res.data : [];
+  }
+
+  function renderSummaryCounts() {
+    var counts = { approved: 0, pending: 0, rejected: 0, done: 0 };
+    MY_BOOKINGS.forEach(function (b) { if (counts.hasOwnProperty(b.status)) counts[b.status]++; });
+    document.getElementById('count-approved').textContent = counts.approved + '건';
+    document.getElementById('count-pending').textContent = counts.pending + '건';
+    document.getElementById('count-rejected').textContent = counts.rejected + '건';
+    document.getElementById('count-done').textContent = counts.done + '건';
+  }
+
+  function renderBookingTable() {
+    var tbody = document.getElementById('bookingTbody');
+    var list = currentFilterStatus ? MY_BOOKINGS.filter(function (b) { return b.status === currentFilterStatus; }) : MY_BOOKINGS;
+
+    if (!list.length) {
+      tbody.innerHTML = '<tr class="empty-row"><td colspan="7">해당하는 내역이 없습니다.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = list.map(function (b) {
+      var spaceName = b.rooms ? ((b.rooms.buildings ? b.rooms.buildings.name + ' ' : '') + b.rooms.room_no + '호') : '-';
+      var usage = formatBookingDate(b.booking_date) + '<br>' + timeShort(b.start_time) + '~' + timeShort(b.end_time);
+      var statusHtml = '<span class="status ' + (STATUS_CLASS[b.status] || '') + '">' + (STATUS_LABEL[b.status] || b.status) + '</span>';
+      var reasonHtml = b.reject_reason ? '<span class="warn">⚠ ' + b.reject_reason + '</span>' : '-';
+      var actionHtml = (b.status === 'pending' || b.status === 'approved')
+        ? '<button type="button" class="btn-cancel" data-cancel-id="' + b.id + '">예약 취소</button>'
+        : '<span class="cell-dash">-</span>';
+
+      var rebookHtml = b.room_id
+        ? '<button type="button" class="btn-rebook" data-rebook-id="' + b.id + '">재예약</button>'
+        : '<span class="cell-dash">-</span>';
+
+      return '<tr data-status="' + b.status + '" data-booking-id="' + b.id + '">' +
+        '<td class="space-name">' + spaceName + '</td>' +
+        '<td>' + usage + '</td>' +
+        '<td>' + (b.purpose || '-') + '</td>' +
+        '<td>' + statusHtml + '</td>' +
+        '<td class="reason">' + reasonHtml + '</td>' +
+        '<td>' + actionHtml + '</td>' +
+        '<td>' + rebookHtml + '</td>' +
+        '</tr>';
+    }).join('');
+
+    tbody.querySelectorAll('[data-cancel-id]').forEach(function (btn) {
+      btn.addEventListener('click', function () { cancelReservation(parseInt(btn.getAttribute('data-cancel-id'), 10)); });
+    });
+    tbody.querySelectorAll('[data-rebook-id]').forEach(function (btn) {
+      btn.addEventListener('click', function () { openRebookModal(parseInt(btn.getAttribute('data-rebook-id'), 10)); });
+    });
+  }
+
+  function clearActiveCards() {
+    Object.keys(cards).forEach(function (k) { cards[k].classList.remove('active'); });
+  }
+
+  function filterByStatus(status, label) {
+    clearActiveCards();
+    cards[status].classList.add('active');
+    currentFilterStatus = status;
+    renderBookingTable();
+    banner.classList.add('show');
+    bannerText.textContent = '"' + label + '" 상태의 내역만 보고 있습니다.';
+  }
+
+  function showAll() {
+    clearActiveCards();
+    currentFilterStatus = '';
+    renderBookingTable();
+    banner.classList.remove('show');
+  }
+
+  async function cancelReservation(bookingId) {
+    var b = MY_BOOKINGS.filter(function (x) { return x.id === bookingId; })[0];
+    if (!b || (b.status !== 'pending' && b.status !== 'approved')) return;
+
+    var spaceName = b.rooms ? ((b.rooms.buildings ? b.rooms.buildings.name + ' ' : '') + b.rooms.room_no + '호') : '이 강의실';
+    var usage = formatBookingDate(b.booking_date).replace(/<br>/g, ' ') + ' ' + timeShort(b.start_time) + '~' + timeShort(b.end_time);
+    var ok = confirm('"' + spaceName + '" (' + usage + ') 예약을 취소하시겠습니까?\n취소한 예약은 되돌릴 수 없습니다.');
+    if (!ok) return;
+
+    // 본인이 신청한 예약을 본인이 취소하는 것이므로(관리자 거절이 아님) 이력 남길 필요 없이 바로 삭제
+    var res = await supabase.from('bookings').delete().eq('id', bookingId);
+    if (res.error) { alert('취소에 실패했습니다: ' + res.error.message); return; }
+
+    MY_BOOKINGS = MY_BOOKINGS.filter(function (x) { return x.id !== bookingId; });
+    renderSummaryCounts();
+    renderBookingTable();
+  }
+
+  /* ---------- 재예약 (이전 예약과 같은 강의실로, 날짜·시간을 자유롭게 선택해 새로 신청) ---------- */
+  var rebookModalOverlay = document.getElementById('rebookModalOverlay');
+  var rebookDateInput = document.getElementById('rebookDateInput');
+  var rebookStartTimeSelect = document.getElementById('rebookStartTimeSelect');
+  var rebookEndTimeSelect = document.getElementById('rebookEndTimeSelect');
+  var rebookPurposeInput = document.getElementById('rebookPurposeInput');
+  var rebookErrorBox = document.getElementById('rebookErrorBox');
+  var rebookConfirmBtn = document.getElementById('rebookModalConfirmBtn');
+  var rebookTarget = null; // { roomId, spaceName, headcount }
+
+  // 이용 시간 선택 옵션 채우기 (09:00~19:00, 1시간 단위 - index.html의 예약 가능 시간대와 동일)
+  (function fillRebookTimeOptions() {
+    var startHtml = '', endHtml = '';
+    for (var h = 9; h <= 19; h++) {
+      var label = pad2(h) + ':00';
+      startHtml += '<option value="' + h + '">' + label + '</option>';
+      endHtml += '<option value="' + h + '">' + label + '</option>';
+    }
+    rebookStartTimeSelect.innerHTML = startHtml;
+    rebookEndTimeSelect.innerHTML = endHtml;
+  })();
+
+  function hourToTimeStr(h) { return pad2(h) + ':00:00'; }
+
+  function nextDateForWeekday(weekday) {
+    // 오늘(포함) 이후 날짜 중 원래 예약과 같은 요일이 처음 오는 날짜를 기본값으로 제안
+    var d = new Date();
+    d.setHours(0, 0, 0, 0);
+    var diff = (weekday - d.getDay() + 7) % 7;
+    d.setDate(d.getDate() + diff);
+    return d;
+  }
+
+  function hideRebookError() {
+    rebookErrorBox.style.display = 'none';
+    rebookErrorBox.textContent = '';
+  }
+
+  function showRebookError(text) {
+    rebookErrorBox.textContent = text;
+    rebookErrorBox.style.display = 'block';
+  }
+
+  function openRebookModal(bookingId) {
+    var b = MY_BOOKINGS.filter(function (x) { return x.id === bookingId; })[0];
+    if (!b || !b.room_id) return;
+
+    var spaceName = b.rooms ? ((b.rooms.buildings ? b.rooms.buildings.name + ' ' : '') + b.rooms.room_no + '호') : '해당 강의실';
+    var origDow = new Date(b.booking_date + 'T00:00:00').getDay();
+    var startHour = parseInt(b.start_time, 10);
+    var endHour = parseInt(b.end_time, 10);
+
+    rebookTarget = {
+      roomId: b.room_id,
+      spaceName: spaceName,
+      headcount: b.headcount || null
+    };
+
+    document.getElementById('rebookModalDesc').innerHTML =
+      '<b>' + spaceName + '</b><br>날짜와 시간을 자유롭게 선택해 재예약을 신청할 수 있습니다. (기본값: 이전과 같은 시간)';
+
+    // 기본값: 날짜는 이전 예약과 같은 요일의 다음 날짜, 시간은 이전 예약과 동일한 시간
+    var defaultDate = nextDateForWeekday(origDow);
+    rebookDateInput.value = dateToISO(defaultDate);
+    rebookDateInput.min = dateToISO(new Date());
+    rebookStartTimeSelect.value = String(startHour);
+    rebookEndTimeSelect.value = String(endHour);
+    rebookPurposeInput.value = b.purpose || '';
+    hideRebookError();
+    rebookModalOverlay.classList.add('show');
+  }
+
+  document.getElementById('rebookModalCancelBtn').addEventListener('click', function () {
+    rebookModalOverlay.classList.remove('show');
+    rebookTarget = null;
+  });
+
+  // 선택한 날짜·시간에 겹치는 정규 수업/기존 예약을 모두 찾아서 반환 (충돌이 없으면 빈 배열)
+  async function findRebookConflicts(roomId, dateStr, startTime, endTime, weekday) {
+    var conflicts = [];
+
+    // 1) 정규 수업(class_schedules)과 겹치는지 확인 (학기 기간 내인 경우만)
+    if (CURRENT_SEMESTER_ID != null && CURRENT_SEMESTER &&
+        !(CURRENT_SEMESTER.start_date > dateStr || CURRENT_SEMESTER.end_date < dateStr)) {
+      var csRes = await supabase.from('class_schedules')
+        .select('start_time, end_time, professor_name, subject_name')
+        .eq('room_id', roomId).eq('weekday', weekday).eq('semester_id', CURRENT_SEMESTER_ID);
+      if (!csRes.error && csRes.data) {
+        csRes.data.forEach(function (cs) {
+          if (startTime < cs.end_time && endTime > cs.start_time) {
+            conflicts.push({
+              start: cs.start_time, end: cs.end_time,
+              label: '정규 수업 · ' + (cs.professor_name || '담당교수 미정') + (cs.subject_name ? (' (' + cs.subject_name + ')') : '')
+            });
+          }
+        });
+      }
+    }
+
+    // 2) 이미 승인/대기 중인 다른 예약과 겹치는지 확인
+    var bkRes = await supabase.from('bookings')
+      .select('start_time, end_time, status')
+      .eq('room_id', roomId).eq('booking_date', dateStr).in('status', ['pending', 'approved']);
+    if (!bkRes.error && bkRes.data) {
+      bkRes.data.forEach(function (bk) {
+        if (startTime < bk.end_time && endTime > bk.start_time) {
+          conflicts.push({
+            start: bk.start_time, end: bk.end_time,
+            label: (STATUS_LABEL[bk.status] || bk.status) + ' 상태의 다른 예약'
+          });
+        }
+      });
+    }
+
+    return conflicts;
+  }
+
+  function formatConflictList(conflicts) {
+    return conflicts.map(function (c) {
+      return '· ' + timeShort(c.start) + '~' + timeShort(c.end) + ' — ' + c.label;
+    }).join('\n');
+  }
+
+  rebookConfirmBtn.addEventListener('click', async function () {
+    if (!rebookTarget) { rebookModalOverlay.classList.remove('show'); return; }
+    hideRebookError();
+
+    var dateStr = rebookDateInput.value;
+    if (!dateStr) { showRebookError('예약 날짜를 선택해주세요.'); return; }
+    var todayStr = dateToISO(new Date());
+    if (dateStr < todayStr) { showRebookError('오늘 이후의 날짜만 선택할 수 있습니다.'); return; }
+
+    var startVal = rebookStartTimeSelect.value;
+    var endVal = rebookEndTimeSelect.value;
+    if (!startVal || !endVal) { showRebookError('이용 시작·종료 시간을 선택해주세요.'); return; }
+    var startHour = parseInt(startVal, 10);
+    var endHour = parseInt(endVal, 10);
+    if (startHour >= endHour) { showRebookError('종료 시간은 시작 시간보다 이후여야 합니다.'); return; }
+
+    var startTime = hourToTimeStr(startHour);
+    var endTime = hourToTimeStr(endHour);
+    var dow = new Date(dateStr + 'T00:00:00').getDay();
+
+    rebookConfirmBtn.disabled = true;
+    rebookConfirmBtn.textContent = '확인 중...';
+
+    var conflicts = await findRebookConflicts(rebookTarget.roomId, dateStr, startTime, endTime, dow);
+
+    rebookConfirmBtn.disabled = false;
+    rebookConfirmBtn.textContent = '재예약 신청';
+
+    if (conflicts.length) {
+      showRebookError('선택하신 시간에 다음 예약이 있어 신청할 수 없습니다.\n' + formatConflictList(conflicts));
+      return;
+    }
+
+    var purpose = rebookPurposeInput.value.trim();
+    var insertRes = await supabase.from('bookings').insert([{
+      room_id: rebookTarget.roomId,
+      booking_date: dateStr,
+      start_time: startTime,
+      end_time: endTime,
+      purpose: purpose || null,
+      headcount: rebookTarget.headcount,
+      requester_id: currentUser.id,
+      status: 'pending'
+    }]);
+
+    if (insertRes.error) { showRebookError('재예약 신청에 실패했습니다: ' + insertRes.error.message); return; }
+
+    rebookModalOverlay.classList.remove('show');
+    var doneSpaceName = rebookTarget.spaceName;
+    rebookTarget = null;
+
+    await loadMyBookings();
+    renderSummaryCounts();
+    renderBookingTable();
+    showPageMessage(doneSpaceName + ' 예약이 재신청되었습니다. 담당 중간관리자 승인 후 확정됩니다.', 'success');
+  });
+
+  function mainback() {
+    window.location.href = "index.html";
+  }
+
+  (async function init() {
+    var ok = await requireSessionAndLoadUser();
+    if (!ok) return;
+    renderProfile();
+    await Promise.all([loadMyBookings(), loadCurrentSemester()]);
+    renderSummaryCounts();
+    renderBookingTable();
+  })();
+</script>
+
+</body>
+</html>
