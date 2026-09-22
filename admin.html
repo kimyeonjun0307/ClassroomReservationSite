@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>최종관리자 · 동서대학교 공간 예약 시스템</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --primary: #B91C1C; --primary-dark: #7F1010; --primary-light: #D64545;
+    --accent: #C2410C;
+    --success: #12805C; --success-bg: #E6F6EF; --success-border: #9BD9BE;
+    --warning: #B7791F; --warning-bg: #FDF3E2; --warning-border: #F0CE8C;
+    --danger: #C13A3A; --danger-bg: #FCEBEB; --danger-border: #F0AFAF;
+    --info: #1D5FA8; --info-bg: #E6F0FB; --info-border: #A9C9EE;
+    --gray-900: #1A1D23; --gray-700: #454B54; --gray-500: #767D89;
+    --gray-300: #D8DCE2; --gray-200: #E7E9ED; --gray-100: #F1F3F6; --gray-50: #F8F9FB;
+    --border: #E4E7EC;
+    --shadow-sm: 0 1px 2px rgba(16,24,40,0.05);
+    --shadow-md: 0 4px 16px rgba(16,24,40,0.08);
+    --shadow-lg: 0 20px 50px rgba(90,15,15,0.28);
+    --radius-sm: 8px; --radius-md: 12px; --radius-lg: 16px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Pretendard", -apple-system, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+    background: var(--gray-50);
+    color: var(--gray-900);
+  }
+
+  header {
+    background: var(--primary); color: #fff; padding: 15px 30px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  header .title { font-size: 17px; font-weight: 700; letter-spacing: -0.2px; }
+  header .title .badge {
+    display: inline-block; margin-left: 10px; font-size: 11px; font-weight: 700;
+    background: #C24B4B; color: #fff; padding: 3px 9px; border-radius: 100px; vertical-align: 2px;
+  }
+  header .menu { font-size: 13px; color: rgba(255,255,255,0.72); display: flex; align-items: center; gap: 18px; }
+  header .menu span { cursor: pointer; transition: color .12s; }
+  header .menu span:hover { color: #fff; }
+
+  .subbar {
+    background: #fff; border-bottom: 1px solid var(--border);
+    padding: 0 30px; display: flex; align-items: center; gap: 4px;
+  }
+  .tab-btn {
+    border: none; background: none; padding: 15px 18px; font-size: 13.5px; font-weight: 600;
+    color: var(--gray-500); cursor: pointer; border-bottom: 2.5px solid transparent; transition: all .12s;
+  }
+  .tab-btn:hover { color: var(--gray-900); }
+  .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 700; }
+
+  .content { max-width: 1200px; margin: 0 auto; padding: 28px 30px 60px; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  .toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; gap: 12px; flex-wrap: wrap; }
+  .toolbar-left { display: flex; align-items: center; gap: 10px; }
+  .toolbar-left select {
+    height: 38px; border: 1.5px solid var(--gray-200); border-radius: var(--radius-sm); padding: 0 12px;
+    font-size: 13px; font-family: inherit; background: #fff; color: var(--gray-900);
+  }
+  .stat-chip { font-size: 12.5px; color: var(--gray-500); }
+  .stat-chip b { color: var(--gray-900); }
+
+  .btn-primary {
+    height: 40px; padding: 0 18px; border: none; border-radius: var(--radius-sm);
+    background: var(--primary); color: #fff; font-size: 13.5px; font-weight: 700; cursor: pointer; transition: background .12s;
+  }
+  .btn-primary:hover { background: var(--primary-dark); }
+
+  .card-panel { background: #fff; border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); overflow: hidden; }
+
+  table.data-table { width: 100%; border-collapse: collapse; }
+  .data-table th {
+    text-align: left; padding: 13px 16px; font-size: 12px; font-weight: 700; color: var(--gray-500);
+    background: var(--gray-50); border-bottom: 1px solid var(--border); white-space: nowrap;
+  }
+  .data-table td { padding: 13px 16px; font-size: 13px; color: var(--gray-700); border-bottom: 1px solid var(--gray-100); vertical-align: middle; }
+  .data-table tbody tr:last-child td { border-bottom: none; }
+  .data-table tbody tr:hover { background: var(--gray-50); }
+  .cell-room { font-weight: 700; color: var(--gray-900); }
+  .cell-muted { color: var(--gray-300); }
+
+  .manager-chip {
+    display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600;
+    background: var(--info-bg); color: var(--info); padding: 4px 10px; border-radius: 100px;
+  }
+  .manager-chip.none { background: var(--gray-100); color: var(--gray-300); }
+
+  /* 강의실 상태 배지 */
+  .status-select {
+    height: 30px; border-radius: 100px; padding: 0 10px 0 8px; font-size: 11.5px; font-weight: 700;
+    cursor: pointer; border: none; -webkit-appearance: none; appearance: none;
+    background-repeat: no-repeat; background-position: right 6px center; background-size: 9px;
+  }
+  .status-select.st-available { background-color: var(--success-bg); color: var(--success); }
+  .status-select.st-maintenance { background-color: var(--warning-bg); color: var(--warning); }
+  .status-select.st-renovation { background-color: var(--info-bg); color: var(--info); }
+  .status-select.st-closed { background-color: var(--danger-bg); color: var(--danger); }
+
+  .status-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 100px; }
+  .status-badge.st-maintenance { background: var(--warning-bg); color: var(--warning); }
+  .status-badge.st-renovation { background: var(--info-bg); color: var(--info); }
+  .status-badge.st-closed { background: var(--danger-bg); color: var(--danger); }
+
+  .icon-btn {
+    border: 1.5px solid var(--gray-200); background: #fff; color: var(--gray-700); font-size: 11.5px; font-weight: 700;
+    padding: 6px 11px; border-radius: var(--radius-sm); cursor: pointer; transition: all .12s;
+  }
+  .icon-btn:hover { border-color: var(--primary-light); color: var(--primary); }
+  .icon-btn.danger { color: var(--danger); }
+  .icon-btn.danger:hover { border-color: var(--danger-border); background: var(--danger-bg); }
+
+  .empty-state { text-align: center; padding: 60px 20px; color: var(--gray-300); font-size: 13.5px; }
+
+  /* ---------- 중간관리자 카드 ---------- */
+  .manager-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+  .manager-card { background: #fff; border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; box-shadow: var(--shadow-sm); }
+  .manager-card-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .manager-avatar {
+    width: 42px; height: 42px; border-radius: 12px; background: var(--primary); color: #fff;
+    display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px; flex-shrink: 0;
+  }
+  .manager-name { font-size: 14.5px; font-weight: 700; color: var(--gray-900); }
+  .manager-email { font-size: 11.5px; color: var(--gray-500); margin-top: 2px; }
+  .manager-rooms-label { font-size: 11.5px; font-weight: 700; color: var(--gray-500); margin-bottom: 8px; }
+  .manager-rooms-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; min-height: 24px; }
+  .manager-card-actions { display: flex; gap: 8px; }
+  .manager-card-actions .icon-btn { flex: 1; }
+
+  /* ---------- 모달 ---------- */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(90,15,15,.5);
+    align-items: center; justify-content: center; z-index: 50; padding: 20px;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal-box { background: #fff; border-radius: var(--radius-lg); padding: 26px; width: 420px; max-width: 100%; max-height: 88vh; overflow-y: auto; box-shadow: var(--shadow-lg); }
+  .modal-title { font-size: 16px; font-weight: 700; color: var(--gray-900); margin-bottom: 6px; }
+  .modal-desc { font-size: 12.5px; color: var(--gray-500); line-height: 1.6; margin-bottom: 20px; }
+  .modal-actions { display: flex; gap: 8px; margin-top: 20px; }
+  .modal-btn-cancel, .modal-btn-confirm { flex: 1; height: 42px; border-radius: var(--radius-sm); font-size: 13.5px; font-weight: 700; cursor: pointer; border: none; transition: background .12s; }
+  .modal-btn-cancel { background: #fff; border: 1.5px solid var(--gray-200); color: var(--gray-700); }
+  .modal-btn-cancel:hover { background: var(--gray-50); }
+  .modal-btn-confirm { background: var(--primary); color: #fff; }
+  .modal-btn-confirm:hover { background: var(--primary-dark); }
+  .modal-btn-confirm.danger { background: var(--danger); }
+  .modal-btn-confirm.danger:hover { background: #A5301F; }
+
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 12.5px; font-weight: 700; color: var(--gray-700); margin-bottom: 7px; }
+  .field input, .field select {
+    width: 100%; height: 40px; border: 1.5px solid var(--gray-200); border-radius: var(--radius-sm);
+    padding: 0 12px; font-size: 13px; font-family: inherit; background: var(--gray-50); color: var(--gray-900);
+  }
+  .field input:focus, .field select:focus { outline: none; border-color: var(--primary-light); background: #fff; }
+  .field-row { display: flex; gap: 8px; }
+  .field-row .field { flex: 1; }
+
+  .room-check-list {
+    max-height: 260px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px;
+  }
+  .rcl-building-name { font-size: 12px; font-weight: 700; color: var(--primary); padding: 8px 8px 4px; }
+  .rcl-item {
+    display: flex; align-items: center; gap: 9px; padding: 7px 9px; border-radius: 6px; cursor: pointer; font-size: 12.5px;
+  }
+  .rcl-item:hover { background: var(--gray-50); }
+  .rcl-item input { width: 15px; height: 15px; accent-color: var(--primary); flex-shrink: 0; }
+  .rcl-item .rcl-taken { font-size: 10.5px; color: var(--gray-300); margin-left: auto; }
+
+  .error-box { color: var(--danger); font-size: 12px; margin-top: -6px; margin-bottom: 12px; display: none; }
+  .error-box.show { display: block; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title">🏫 동서대학교 강의실 예약 <span class="badge">최종관리자</span></div>
+  <div class="menu">
+    <span>🔔 알림</span>
+    <span id="logoutBtn">로그아웃</span>
+  </div>
+</header>
+
+<div class="subbar">
+  <button type="button" class="tab-btn active" data-tab="rooms">강의실 관리</button>
+  <button type="button" class="tab-btn" data-tab="managers">중간관리자 관리</button>
+  <button type="button" class="tab-btn" data-tab="semesters">학기 관리</button>
+</div>
+
+<div class="content">
+
+  <!-- ================= 탭 1: 강의실 관리 ================= -->
+  <div class="tab-panel active" id="tabRooms">
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <select id="roomBuildingFilter"><option value="">전체 건물</option></select>
+        <span class="stat-chip">전체 <b id="roomCountLabel">0</b>실</span>
+      </div>
+      <button type="button" class="btn-primary" id="openAddRoomBtn">＋ 강의실 추가</button>
+    </div>
+
+    <div class="card-panel">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>건물</th><th>층</th><th>호실</th><th>수용인원</th><th>공간유형</th><th>보유 기자재</th><th>상태</th><th>담당 관리자</th><th style="text-align:right;">관리</th>
+          </tr>
+        </thead>
+        <tbody id="roomTableBody"></tbody>
+      </table>
+      <div class="empty-state" id="roomEmptyState" style="display:none;">등록된 강의실이 없어요.</div>
+    </div>
+  </div>
+
+  <!-- ================= 탭 2: 중간관리자 관리 ================= -->
+  <div class="tab-panel" id="tabManagers">
+    <div class="toolbar">
+      <span class="stat-chip">전체 <b id="managerCountLabel">0</b>명</span>
+      <button type="button" class="btn-primary" id="openAddManagerBtn">＋ 중간관리자 지정</button>
+    </div>
+
+    <div class="manager-grid" id="managerGrid"></div>
+  </div>
+
+  <!-- ================= 탭 3: 학기 관리 ================= -->
+  <div class="tab-panel" id="tabSemesters">
+    <div class="toolbar">
+      <span class="stat-chip">모든 관리자에게 동일하게 적용돼요 · 전체 <b id="semesterCountLabel">0</b>개</span>
+      <button type="button" class="btn-primary" id="openAddSemesterBtn">＋ 학기 추가</button>
+    </div>
+
+    <div class="card-panel">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>학기명</th><th>시작일</th><th>종료일</th><th>상태</th><th style="text-align:right;">관리</th>
+          </tr>
+        </thead>
+        <tbody id="semesterTableBody"></tbody>
+      </table>
+      <div class="empty-state" id="semesterEmptyState" style="display:none;">등록된 학기가 없어요.</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- 강의실 추가 모달 -->
+<div class="modal-overlay" id="addRoomModalOverlay">
+  <div class="modal-box">
+    <div class="modal-title">강의실 추가</div>
+    <div class="modal-desc">새 강의실 정보를 입력해주세요.</div>
+
+    <div class="field">
+      <label>건물</label>
+      <select id="arBuilding"></select>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>층 (지하는 음수, 예: -1)</label>
+        <input type="number" id="arFloor" placeholder="예: 3">
+      </div>
+      <div class="field">
+        <label>호실 번호</label>
+        <input type="text" id="arRoomNumber" placeholder="예: U503">
+      </div>
+    </div>
+    <div class="field">
+      <label>수용 인원</label>
+      <input type="number" id="arCapacity" placeholder="예: 30">
+    </div>
+    <div class="field">
+      <label>공간유형</label>
+      <select id="arRoomType"></select>
+    </div>
+    <div class="field">
+      <label>보유 기자재</label>
+      <div class="room-check-list" id="arEquipCheckList"></div>
+    </div>
+    <div class="error-box" id="arErrorBox"></div>
+
+    <div class="modal-actions">
+      <button type="button" class="modal-btn-cancel" id="arCancelBtn">취소</button>
+      <button type="button" class="modal-btn-confirm" id="arSaveBtn">추가</button>
+    </div>
+  </div>
+</div>
+
+<!-- 강의실 삭제 확인 모달 -->
+<div class="modal-overlay" id="deleteRoomModalOverlay">
+  <div class="modal-box">
+    <div class="modal-title">강의실을 삭제하시겠습니까?</div>
+    <div class="modal-desc" id="deleteRoomDesc">삭제하면 되돌릴 수 없어요. 해당 강의실의 예약 데이터도 함께 표시되지 않게 돼요.</div>
+    <div class="modal-actions">
+      <button type="button" class="modal-btn-cancel" id="deleteRoomCancelBtn">취소</button>
+      <button type="button" class="modal-btn-confirm danger" id="deleteRoomConfirmBtn">삭제</button>
+    </div>
+  </div>
+</div>
+
+<!-- 중간관리자 지정 모달 -->
+<div class="modal-overlay" id="addManagerModalOverlay">
+  <div class="modal-box">
+    <div class="modal-title">중간관리자 지정</div>
+    <div class="modal-desc">이미 가입된 조교 계정 중에서 골라서, 담당할 강의실과 함께 지정해주세요. (새 계정은 만들지 않습니다 — 조교 본인이 먼저 회원가입 해야 해요)</div>
+
+    <div class="field">
+      <label>조교 선택 (가입된 계정)</label>
+      <select id="amUserSelect"></select>
+    </div>
+    <div class="field">
+      <label>담당 강의실 선택</label>
+      <div class="room-check-list" id="amRoomCheckList"></div>
+    </div>
+    <div class="error-box" id="amErrorBox"></div>
+
+    <div class="modal-actions">
+      <button type="button" class="modal-btn-cancel" id="amCancelBtn">취소</button>
+      <button type="button" class="modal-btn-confirm" id="amSaveBtn">지정</button>
+    </div>
+  </div>
+</div>
+
+<!-- 강의실 권한 수정 모달 -->
+<div class="modal-overlay" id="editPermModalOverlay">
+  <div class="modal-box">
+    <div class="modal-title">강의실 권한 수정</div>
+    <div class="modal-desc" id="editPermDesc">담당 강의실을 체크/해제하고 저장해주세요.</div>
+    <div class="room-check-list" id="epRoomCheckList"></div>
+    <div class="modal-actions">
+      <button type="button" class="modal-btn-cancel" id="epCancelBtn">취소</button>
+      <button type="button" class="modal-btn-confirm" id="epSaveBtn">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- 중간관리자 삭제 확인 모달 -->
+<div class="modal-overlay" id="deleteManagerModalOverlay">
+  <div class="modal-box">
+    <div class="modal-title">담당을 해제하시겠습니까?</div>
+    <div class="modal-desc" id="deleteManagerDesc">해제하면 이 사람이 담당하던 강의실은 모두 미배정 상태가 되고, 이 사람은 다시 예약자(조교) 권한으로 돌아가요. 로그인 계정 자체는 삭제되지 않아요.</div>
+    <div class="modal-actions">
+      <button type="button" class="modal-btn-cancel" id="deleteManagerCancelBtn">취소</button>
+      <button type="button" class="modal-btn-confirm danger" id="deleteManagerConfirmBtn">담당 해제</button>
+    </div>
+  </div>
+</div>
+
+<!-- 학기 추가 모달 -->
+<div class="modal-overlay" id="addSemesterModalOverlay">
+  <div class="modal-box">
+    <div class="modal-title" id="asModalTitle">학기 추가</div>
+    <div class="modal-desc" id="asModalDesc">모든 중간관리자의 "정기수업 등록" 화면에 동일하게 노출돼요.</div>
+    <div class="field">
+      <label>학기명</label>
+      <input type="text" id="asName" placeholder="예: 2026학년도 겨울계절학기">
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>시작일</label>
+        <input type="date" id="asStartDate">
+      </div>
+      <div class="field">
+        <label>종료일</label>
+        <input type="date" id="asEndDate">
+      </div>
+    </div>
+    <div class="error-box" id="asErrorBox"></div>
+    <div class="modal-actions">
+      <button type="button" class="modal-btn-cancel" id="asCancelBtn">취소</button>
+      <button type="button" class="modal-btn-confirm" id="asSaveBtn">추가</button>
+    </div>
+  </div>
+</div>
+
+<!-- 학기 삭제 확인 모달 -->
+<div class="modal-overlay" id="deleteSemesterModalOverlay">
+  <div class="modal-box">
+    <div class="modal-title">학기를 삭제하시겠습니까?</div>
+    <div class="modal-desc" id="deleteSemesterDesc">삭제하면 모든 중간관리자의 목록에서 즉시 사라져요.</div>
+    <div class="modal-actions">
+      <button type="button" class="modal-btn-cancel" id="deleteSemesterCancelBtn">취소</button>
+      <button type="button" class="modal-btn-confirm danger" id="deleteSemesterConfirmBtn">삭제</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // TODO: login.html과 동일한 Supabase 프로젝트 정보로 교체
+  var SUPABASE_URL = 'https://yclrlgcixldovbhygjrc.supabase.co';
+  var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InljbHJsZ2NpeGxkb3ZiaHlnanJjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY2NzI2NTUsImV4cCI6MjEwMjI0ODY1NX0.hk2FB9D45QcGxFXPeNwNENcBusuOnLeakKNqA3gFtmo';
+  var supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  /* ================= 로그인 확인 (final_admin은 건물 범위 제한 없이 전체 관리) ================= */
+  var currentAssistant = null; // { id, name, role }
+
+  async function requireFinalAdmin() {
+    var sessionRes = await supabase.auth.getSession();
+    if (!sessionRes.data.session) { window.location.href = "login.html"; return false; }
+
+    var profileRes = await supabase.from("users").select("id, name, role").eq("id", sessionRes.data.session.user.id).single();
+    if (profileRes.error || !profileRes.data) { window.location.href = "login.html"; return false; }
+    currentAssistant = profileRes.data;
+
+    if (currentAssistant.role !== "final_admin") {
+      alert("최종관리자 계정으로만 접근할 수 있습니다.");
+      window.location.href = "login.html";
+      return false;
+    }
+    return true;
+  }
+
+  /* ================= DB 상태 (메모리 캐시, 매 렌더링 전에 fetchAllData()로 새로고침) ================= */
+  var BUILDINGS_LIST = [];    // [{id, name, status}]
+  var ROOM_TYPES_LIST = [];   // [{id, name}]
+  var EQUIPMENT_LIST = [];    // [{id, name}]
+  var ROOMS = [];             // 전체 건물의 rooms row (manager 조인 포함)
+  var ROOM_EQUIP_BY_ID = {};  // room_id -> [equipment name]
+  var SEMESTERS = [];         // semesters row 전체 (전역 공유)
+  var ASSISTANT_USERS = [];   // role='assistant'인 사용자 전체 (중간관리자 지정용 후보 목록)
+
+  function buildingName(id) {
+    var b = BUILDINGS_LIST.filter(function (x) { return x.id === id; })[0];
+    return b ? b.name : "";
+  }
+
+  function roomTypeName(id) {
+    var t = ROOM_TYPES_LIST.filter(function (x) { return x.id === id; })[0];
+    return t ? t.name : "";
+  }
+
+  function findRoom(id) {
+    return ROOMS.filter(function (r) { return r.id === id; })[0] || null;
+  }
+
+  /* 담당 관리자 id -> { info, rooms:[room,...] } */
+  function buildManagersMap() {
+    var map = {};
+    ROOMS.forEach(function (r) {
+      if (!r.manager_id || !r.manager) return;
+      if (!map[r.manager_id]) map[r.manager_id] = { info: r.manager, rooms: [] };
+      map[r.manager_id].rooms.push(r);
+    });
+    return map;
+  }
+
+  async function fetchAllData() {
+    var buildingsRes = await supabase.from("buildings").select("id, name, status").order("name");
+    BUILDINGS_LIST = (!buildingsRes.error && buildingsRes.data) ? buildingsRes.data : [];
+
+    var roomsRes = await supabase
+      .from("rooms")
+      .select("*, manager:manager_id(id, name)")
+      .order("building_id")
+      .order("floor")
+      .order("room_no");
+    ROOMS = (!roomsRes.error && roomsRes.data) ? roomsRes.data : [];
+
+    var usersRes = await supabase.from("users").select("id, name, role").eq("role", "assistant").order("name");
+    ASSISTANT_USERS = (!usersRes.error && usersRes.data) ? usersRes.data : [];
+
+    var roomIds = ROOMS.map(function (r) { return r.id; });
+    ROOM_EQUIP_BY_ID = {};
+    if (roomIds.length) {
+      var reRes = await supabase.from("room_equipment").select("room_id, equipment:equipment_id(name)").in("room_id", roomIds);
+      if (!reRes.error && reRes.data) {
+        reRes.data.forEach(function (row) {
+          if (!ROOM_EQUIP_BY_ID[row.room_id]) ROOM_EQUIP_BY_ID[row.room_id] = [];
+          if (row.equipment && row.equipment.name) ROOM_EQUIP_BY_ID[row.room_id].push(row.equipment.name);
+        });
+      }
+    }
+
+    if (!ROOM_TYPES_LIST.length) {
+      var typesRes = await supabase.from("room_types").select("id, name").order("id");
+      ROOM_TYPES_LIST = (!typesRes.error && typesRes.data) ? typesRes.data : [];
+    }
+    if (!EQUIPMENT_LIST.length) {
+      var equipRes = await supabase.from("equipment").select("id, name").order("id");
+      EQUIPMENT_LIST = (!equipRes.error && equipRes.data) ? equipRes.data : [];
+    }
+
+    var semRes = await supabase.from("semesters").select("*").order("start_date");
+    SEMESTERS = (!semRes.error && semRes.data) ? semRes.data : [];
+  }
+
+  /* ================= 탭 전환 ================= */
+  document.querySelectorAll(".tab-btn").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      document.querySelectorAll(".tab-btn").forEach(function (b) { b.classList.toggle("active", b === btn); });
+      var tab = btn.getAttribute("data-tab");
+      document.getElementById("tabRooms").classList.toggle("active", tab === "rooms");
+      document.getElementById("tabManagers").classList.toggle("active", tab === "managers");
+      document.getElementById("tabSemesters").classList.toggle("active", tab === "semesters");
+    });
+  });
+
+  /* ================= 강의실 관리 탭 ================= */
+  var roomBuildingFilter = document.getElementById("roomBuildingFilter");
+  roomBuildingFilter.addEventListener("change", renderRoomTable);
+
+  function initRoomBuildingFilterOptions() {
+    roomBuildingFilter.innerHTML = '<option value="">전체 건물</option>' +
+      BUILDINGS_LIST.map(function (b) { return '<option value="' + b.id + '">' + b.name + "</option>"; }).join("");
+  }
+
+  function renderRoomTable() {
+    var tbody = document.getElementById("roomTableBody");
+    var filterBId = roomBuildingFilter.value;
+    var rooms = ROOMS.filter(function (rm) { return !filterBId || String(rm.building_id) === filterBId; });
+
+    document.getElementById("roomCountLabel").textContent = rooms.length;
+    document.getElementById("roomEmptyState").style.display = rooms.length ? "none" : "block";
+
+    tbody.innerHTML = rooms.map(function (rm) {
+      var equipNames = ROOM_EQUIP_BY_ID[rm.id] || [];
+      var mgrChip = rm.manager
+        ? '<span class="manager-chip">' + rm.manager.name + "</span>"
+        : '<span class="manager-chip none">미배정</span>';
+      var status = rm.is_active ? "available" : "closed";
+      var statusSelect = '<select class="status-select st-' + status + '" data-room-id="' + rm.id + '">' +
+        '<option value="available"' + (status === "available" ? " selected" : "") + '>사용가능</option>' +
+        '<option value="closed"' + (status === "closed" ? " selected" : "") + '>사용중지</option>' +
+        '</select>';
+      return "<tr>" +
+        "<td>" + buildingName(rm.building_id) + "</td>" +
+        "<td>" + floorLabel(rm.floor) + "</td>" +
+        '<td class="cell-room">' + rm.room_no + "호</td>" +
+        "<td>" + rm.capacity + "명</td>" +
+        "<td>" + (roomTypeName(rm.room_type_id) || "-") + "</td>" +
+        "<td>" + (equipNames.length ? equipNames.join(", ") : "-") + "</td>" +
+        "<td>" + statusSelect + "</td>" +
+        "<td>" + mgrChip + "</td>" +
+        '<td style="text-align:right;"><button type="button" class="icon-btn danger" data-del-room="' + rm.id + '">삭제</button></td>' +
+        "</tr>";
+    }).join("");
+
+    tbody.querySelectorAll("[data-del-room]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        openDeleteRoomModal(parseInt(btn.getAttribute("data-del-room"), 10));
+      });
+    });
+    tbody.querySelectorAll("[data-room-id]").forEach(function (sel) {
+      sel.addEventListener("change", async function () {
+        var roomId = parseInt(sel.getAttribute("data-room-id"), 10);
+        var isActive = sel.value === "available";
+        var res = await supabase.from("rooms").update({ is_active: isActive }).eq("id", roomId);
+        if (res.error) { alert("상태 변경에 실패했습니다: " + res.error.message); return; }
+        var room = findRoom(roomId);
+        if (room) room.is_active = isActive;
+        sel.className = "status-select st-" + sel.value;
+      });
+    });
+  }
+
+  function floorLabel(f) {
+    var n = parseInt(f, 10);
+    return (n < 0 ? ("지하" + (-n) + "층") : (n + "층"));
+  }
+
+  /* ---------- 강의실 추가 ---------- */
+  var addRoomModalOverlay = document.getElementById("addRoomModalOverlay");
+
+  document.getElementById("openAddRoomBtn").addEventListener("click", function () {
+    document.getElementById("arBuilding").innerHTML = BUILDINGS_LIST.map(function (b) {
+      return '<option value="' + b.id + '">' + b.name + "</option>";
+    }).join("");
+    document.getElementById("arFloor").value = "";
+    document.getElementById("arRoomNumber").value = "";
+    document.getElementById("arCapacity").value = "";
+    document.getElementById("arErrorBox").classList.remove("show");
+    document.getElementById("arRoomType").innerHTML = ROOM_TYPES_LIST.map(function (t) {
+      return '<option value="' + t.id + '">' + t.name + "</option>";
+    }).join("");
+    document.getElementById("arEquipCheckList").innerHTML = EQUIPMENT_LIST.map(function (e) {
+      return '<label class="rcl-item"><input type="checkbox" value="' + e.id + '">' + e.name + "</label>";
+    }).join("") || '<div class="empty-state" style="padding:20px;">등록된 기자재가 없어요.</div>';
+    addRoomModalOverlay.classList.add("show");
+  });
+  document.getElementById("arCancelBtn").addEventListener("click", function () { addRoomModalOverlay.classList.remove("show"); });
+
+  document.getElementById("arSaveBtn").addEventListener("click", async function () {
+    var buildingId = document.getElementById("arBuilding").value;
+    var floor = document.getElementById("arFloor").value;
+    var rNum = document.getElementById("arRoomNumber").value.trim();
+    var capacity = document.getElementById("arCapacity").value;
+    var roomTypeId = document.getElementById("arRoomType").value;
+    var errBox = document.getElementById("arErrorBox");
+
+    if (!buildingId) { errBox.textContent = "건물을 선택해주세요."; errBox.classList.add("show"); return; }
+    if (floor === "") { errBox.textContent = "층을 입력해주세요."; errBox.classList.add("show"); return; }
+    if (!rNum) { errBox.textContent = "호실 번호를 입력해주세요."; errBox.classList.add("show"); return; }
+    if (ROOMS.some(function (r) { return String(r.building_id) === buildingId && r.floor === parseInt(floor, 10) && r.room_no === rNum; })) {
+      errBox.textContent = "이 건물의 같은 층에 이미 존재하는 호실 번호예요."; errBox.classList.add("show"); return;
+    }
+    if (!capacity) { errBox.textContent = "수용 인원을 입력해주세요."; errBox.classList.add("show"); return; }
+
+    var insertRes = await supabase.from("rooms").insert({
+      building_id: parseInt(buildingId, 10),
+      floor: parseInt(floor, 10),
+      room_no: rNum,
+      capacity: parseInt(capacity, 10),
+      room_type_id: roomTypeId ? parseInt(roomTypeId, 10) : null,
+      is_active: true
+    }).select().single();
+
+    if (insertRes.error) { errBox.textContent = "추가에 실패했습니다: " + insertRes.error.message; errBox.classList.add("show"); return; }
+
+    var newRoomId = insertRes.data.id;
+    var checkedEquipIds = Array.from(document.querySelectorAll("#arEquipCheckList input:checked")).map(function (cb) { return parseInt(cb.value, 10); });
+    if (checkedEquipIds.length) {
+      var rows = checkedEquipIds.map(function (eid) { return { room_id: newRoomId, equipment_id: eid }; });
+      await supabase.from("room_equipment").insert(rows);
+    }
+
+    addRoomModalOverlay.classList.remove("show");
+    await fetchAllData();
+    renderRoomTable();
+    renderManagerGrid();
+  });
+
+  /* ---------- 강의실 삭제 ---------- */
+  var deleteRoomModalOverlay = document.getElementById("deleteRoomModalOverlay");
+  var pendingDeleteRoomId = null;
+
+  function openDeleteRoomModal(roomId) {
+    pendingDeleteRoomId = roomId;
+    var room = findRoom(roomId);
+    document.getElementById("deleteRoomDesc").textContent =
+      (room ? room.room_no + "호를" : "이 강의실을") + " 삭제하면 되돌릴 수 없어요. 이미 예약/수업 기록이 있는 강의실은 삭제 대신 '사용중지'로 바꿔주세요.";
+    deleteRoomModalOverlay.classList.add("show");
+  }
+  document.getElementById("deleteRoomCancelBtn").addEventListener("click", function () { deleteRoomModalOverlay.classList.remove("show"); });
+  document.getElementById("deleteRoomConfirmBtn").addEventListener("click", async function () {
+    if (!pendingDeleteRoomId) return;
+    var roomId = pendingDeleteRoomId;
+
+    await supabase.from("room_equipment").delete().eq("room_id", roomId);
+    var delRes = await supabase.from("rooms").delete().eq("id", roomId);
+
+    deleteRoomModalOverlay.classList.remove("show");
+    pendingDeleteRoomId = null;
+
+    if (delRes.error) {
+      alert("삭제에 실패했습니다. 이미 예약/수업 기록이 있는 강의실일 수 있어요. 대신 상태를 '사용중지'로 바꿔주세요.\n(" + delRes.error.message + ")");
+      return;
+    }
+
+    await fetchAllData();
+    renderRoomTable();
+    renderManagerGrid();
+  });
+
+  /* ================= 중간관리자 관리 탭 ================= */
+  function renderManagerGrid() {
+    var grid = document.getElementById("managerGrid");
+    var managersMap = buildManagersMap();
+    var ids = Object.keys(managersMap);
+    document.getElementById("managerCountLabel").textContent = ids.length;
+
+    if (!ids.length) {
+      grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;">지정된 중간관리자가 없어요.</div>';
+      return;
+    }
+
+    grid.innerHTML = ids.map(function (id) {
+      var entry = managersMap[id];
+      var m = entry.info;
+      var chips = entry.rooms.length
+        ? entry.rooms.map(function (rm) { return '<span class="manager-chip">' + rm.room_no + "호</span>"; }).join("")
+        : '<span class="manager-chip none">담당 강의실 없음</span>';
+      return '<div class="manager-card">' +
+        '<div class="manager-card-head">' +
+          '<div class="manager-avatar">' + (m.name ? m.name.charAt(0) : "?") + '</div>' +
+          '<div><div class="manager-name">' + m.name + '</div><div class="manager-email">' + (m.email || "") + '</div></div>' +
+        '</div>' +
+        '<div class="manager-rooms-label">담당 강의실 (' + entry.rooms.length + ')</div>' +
+        '<div class="manager-rooms-chips">' + chips + '</div>' +
+        '<div class="manager-card-actions">' +
+          '<button type="button" class="icon-btn" data-perm-id="' + id + '">🔑 강의실 권한 수정</button>' +
+          '<button type="button" class="icon-btn danger" data-del-mgr="' + id + '">담당 해제</button>' +
+        '</div>' +
+        '</div>';
+    }).join("");
+
+    grid.querySelectorAll("[data-perm-id]").forEach(function (btn) {
+      btn.addEventListener("click", function () { openEditPermModal(btn.getAttribute("data-perm-id")); });
+    });
+    grid.querySelectorAll("[data-del-mgr]").forEach(function (btn) {
+      btn.addEventListener("click", function () { openDeleteManagerModal(btn.getAttribute("data-del-mgr")); });
+    });
+  }
+
+  /* ---------- 강의실 체크리스트 공통 렌더링 (내 건물 강의실만) ---------- */
+  function buildRoomCheckListHTML(checkedRoomIds, excludeManagerId) {
+    var html = "";
+    ROOMS.forEach(function (r) {
+      var checked = checkedRoomIds.indexOf(r.id) !== -1 ? " checked" : "";
+      var takenLabel = "";
+      if (r.manager_id && r.manager_id !== excludeManagerId && r.manager) {
+        takenLabel = '<span class="rcl-taken">' + r.manager.name + " 담당중</span>";
+      }
+      html += '<label class="rcl-item"><input type="checkbox" value="' + r.id + '"' + checked + ">" +
+        buildingName(r.building_id) + " " + floorLabel(r.floor) + " " + r.room_no + "호" + takenLabel + "</label>";
+    });
+    return html || '<div class="empty-state" style="padding:20px;">등록된 강의실이 없어요.</div>';
+  }
+  function checkedRoomIdsFrom(listId) {
+    return Array.from(document.querySelectorAll("#" + listId + " input:checked")).map(function (cb) { return parseInt(cb.value, 10); });
+  }
+
+  /* ---------- 중간관리자 지정 (이미 가입된 조교 목록에서 선택해서 지정) ---------- */
+  var addManagerModalOverlay = document.getElementById("addManagerModalOverlay");
+  document.getElementById("openAddManagerBtn").addEventListener("click", function () {
+    var userSelect = document.getElementById("amUserSelect");
+    if (!ASSISTANT_USERS.length) {
+      userSelect.innerHTML = '<option value="">지정 가능한 조교 계정이 없어요</option>';
+    } else {
+      userSelect.innerHTML = ASSISTANT_USERS.map(function (u) {
+        return '<option value="' + u.id + '">' + u.name + "</option>";
+      }).join("");
+    }
+    document.getElementById("amErrorBox").classList.remove("show");
+    document.getElementById("amRoomCheckList").innerHTML = buildRoomCheckListHTML([], null);
+    addManagerModalOverlay.classList.add("show");
+  });
+  document.getElementById("amCancelBtn").addEventListener("click", function () { addManagerModalOverlay.classList.remove("show"); });
+
+  document.getElementById("amSaveBtn").addEventListener("click", async function () {
+    var userId = document.getElementById("amUserSelect").value;
+    var errBox = document.getElementById("amErrorBox");
+
+    if (!userId) { errBox.textContent = "지정할 조교를 선택해주세요."; errBox.classList.add("show"); return; }
+
+    var roomIds = checkedRoomIdsFrom("amRoomCheckList");
+
+    var roleRes = await supabase.from("users").update({ role: "mid_admin" }).eq("id", userId);
+    if (roleRes.error) { errBox.textContent = "지정에 실패했습니다: " + roleRes.error.message; errBox.classList.add("show"); return; }
+
+    if (roomIds.length) {
+      var assignRes = await supabase.from("rooms").update({ manager_id: userId }).in("id", roomIds);
+      if (assignRes.error) { errBox.textContent = "강의실 배정에 실패했습니다: " + assignRes.error.message; errBox.classList.add("show"); return; }
+    }
+
+    addManagerModalOverlay.classList.remove("show");
+    await fetchAllData();
+    renderManagerGrid();
+    renderRoomTable();
+  });
+
+  /* ---------- 강의실 권한 수정 ---------- */
+  var editPermModalOverlay = document.getElementById("editPermModalOverlay");
+  var currentEditPermId = null;
+
+  function openEditPermModal(id) {
+    currentEditPermId = id;
+    var entry = buildManagersMap()[id];
+    if (!entry) return;
+    document.getElementById("editPermDesc").textContent = entry.info.name + "님이 담당할 강의실을 체크/해제해주세요.";
+    var checkedIds = entry.rooms.map(function (r) { return r.id; });
+    document.getElementById("epRoomCheckList").innerHTML = buildRoomCheckListHTML(checkedIds, id);
+    editPermModalOverlay.classList.add("show");
+  }
+  document.getElementById("epCancelBtn").addEventListener("click", function () { editPermModalOverlay.classList.remove("show"); });
+
+  document.getElementById("epSaveBtn").addEventListener("click", async function () {
+    if (!currentEditPermId) return;
+    var checkedIds = checkedRoomIdsFrom("epRoomCheckList");
+    var prevIds = (buildManagersMap()[currentEditPermId] || { rooms: [] }).rooms.map(function (r) { return r.id; });
+
+    var toAdd = checkedIds.filter(function (id) { return prevIds.indexOf(id) === -1; });
+    var toRemove = prevIds.filter(function (id) { return checkedIds.indexOf(id) === -1; });
+
+    if (toAdd.length) await supabase.from("rooms").update({ manager_id: currentEditPermId }).in("id", toAdd);
+    if (toRemove.length) await supabase.from("rooms").update({ manager_id: null }).in("id", toRemove);
+
+    editPermModalOverlay.classList.remove("show");
+    await fetchAllData();
+    renderManagerGrid();
+    renderRoomTable();
+  });
+
+  /* ---------- 중간관리자 담당 해제 (계정 자체는 삭제하지 않고, role을 assistant로 되돌림) ---------- */
+  var deleteManagerModalOverlay = document.getElementById("deleteManagerModalOverlay");
+  var pendingDeleteManagerId = null;
+
+  function openDeleteManagerModal(id) {
+    pendingDeleteManagerId = id;
+    var entry = buildManagersMap()[id];
+    document.getElementById("deleteManagerDesc").textContent =
+      (entry ? entry.info.name : "이 사람") + "님의 담당을 해제하면 담당하던 강의실 " + (entry ? entry.rooms.length : 0) + "개가 모두 미배정 상태가 되고, 예약자(조교) 권한으로 돌아가요.";
+    deleteManagerModalOverlay.classList.add("show");
+  }
+  document.getElementById("deleteManagerCancelBtn").addEventListener("click", function () { deleteManagerModalOverlay.classList.remove("show"); });
+  document.getElementById("deleteManagerConfirmBtn").addEventListener("click", async function () {
+    if (!pendingDeleteManagerId) return;
+    var id = pendingDeleteManagerId;
+
+    await supabase.from("rooms").update({ manager_id: null }).eq("manager_id", id);
+    await supabase.from("users").update({ role: "assistant" }).eq("id", id);
+
+    deleteManagerModalOverlay.classList.remove("show");
+    pendingDeleteManagerId = null;
+    await fetchAllData();
+    renderManagerGrid();
+    renderRoomTable();
+  });
+
+  /* ================= 학기 관리 탭 (semesters 테이블, 전역 공유) ================= */
+  function renderSemesterTable() {
+    var tbody = document.getElementById("semesterTableBody");
+    document.getElementById("semesterCountLabel").textContent = SEMESTERS.length;
+    document.getElementById("semesterEmptyState").style.display = SEMESTERS.length ? "none" : "block";
+
+    tbody.innerHTML = SEMESTERS.map(function (s) {
+      return "<tr>" +
+        '<td class="cell-room">' + s.name + "</td>" +
+        "<td>" + s.start_date + "</td>" +
+        "<td>" + s.end_date + "</td>" +
+        "<td>" + (s.is_current
+          ? '<span class="status-badge st-renovation">현재 학기</span>'
+          : '<button type="button" class="icon-btn" data-set-current-sem="' + s.id + '">현재 학기로 설정</button>') + "</td>" +
+        '<td style="text-align:right;">' +
+          '<button type="button" class="icon-btn" data-edit-sem="' + s.id + '" style="margin-right:6px;">수정</button>' +
+          '<button type="button" class="icon-btn danger" data-del-sem="' + s.id + '">삭제</button>' +
+        "</td>" +
+        "</tr>";
+    }).join("");
+
+    tbody.querySelectorAll("[data-del-sem]").forEach(function (btn) {
+      btn.addEventListener("click", function () { openDeleteSemesterModal(parseInt(btn.getAttribute("data-del-sem"), 10)); });
+    });
+    tbody.querySelectorAll("[data-edit-sem]").forEach(function (btn) {
+      btn.addEventListener("click", function () { openEditSemesterModal(parseInt(btn.getAttribute("data-edit-sem"), 10)); });
+    });
+    tbody.querySelectorAll("[data-set-current-sem]").forEach(function (btn) {
+      btn.addEventListener("click", function () { setCurrentSemester(parseInt(btn.getAttribute("data-set-current-sem"), 10)); });
+    });
+  }
+
+  // 학기는 한 번에 하나만 "현재 학기"일 수 있으므로, 나머지는 전부 false로 내리고 선택한 것만 true로 설정
+  async function setCurrentSemester(semesterId) {
+    var offRes = await supabase.from("semesters").update({ is_current: false }).neq("id", semesterId);
+    if (offRes.error) { alert("현재 학기 설정에 실패했습니다: " + offRes.error.message); return; }
+    var onRes = await supabase.from("semesters").update({ is_current: true }).eq("id", semesterId);
+    if (onRes.error) { alert("현재 학기 설정에 실패했습니다: " + onRes.error.message); return; }
+
+    await fetchAllData();
+    renderSemesterTable();
+  }
+
+  var addSemesterModalOverlay = document.getElementById("addSemesterModalOverlay");
+  var pendingEditSemesterId = null;
+
+  document.getElementById("openAddSemesterBtn").addEventListener("click", function () {
+    pendingEditSemesterId = null;
+    document.getElementById("asModalTitle").textContent = "학기 추가";
+    document.getElementById("asModalDesc").textContent = '모든 중간관리자의 "정기수업 등록" 화면에 동일하게 노출돼요.';
+    document.getElementById("asSaveBtn").textContent = "추가";
+    document.getElementById("asName").value = "";
+    document.getElementById("asStartDate").value = "";
+    document.getElementById("asEndDate").value = "";
+    document.getElementById("asErrorBox").classList.remove("show");
+    addSemesterModalOverlay.classList.add("show");
+  });
+  document.getElementById("asCancelBtn").addEventListener("click", function () { addSemesterModalOverlay.classList.remove("show"); });
+
+  function openEditSemesterModal(id) {
+    var s = SEMESTERS.filter(function (x) { return x.id === id; })[0];
+    if (!s) return;
+    pendingEditSemesterId = id;
+    document.getElementById("asModalTitle").textContent = "학기 수정";
+    document.getElementById("asModalDesc").textContent = "수정 내용은 모든 중간관리자 화면에 즉시 반영돼요.";
+    document.getElementById("asSaveBtn").textContent = "저장";
+    document.getElementById("asName").value = s.name;
+    document.getElementById("asStartDate").value = s.start_date;
+    document.getElementById("asEndDate").value = s.end_date;
+    document.getElementById("asErrorBox").classList.remove("show");
+    addSemesterModalOverlay.classList.add("show");
+  }
+
+  document.getElementById("asSaveBtn").addEventListener("click", async function () {
+    var name = document.getElementById("asName").value.trim();
+    var start = document.getElementById("asStartDate").value;
+    var end = document.getElementById("asEndDate").value;
+    var errBox = document.getElementById("asErrorBox");
+
+    if (!name) { errBox.textContent = "학기명을 입력해주세요."; errBox.classList.add("show"); return; }
+    if (!start || !end) { errBox.textContent = "시작일과 종료일을 모두 선택해주세요."; errBox.classList.add("show"); return; }
+    if (start > end) { errBox.textContent = "종료일은 시작일보다 빠를 수 없어요."; errBox.classList.add("show"); return; }
+
+    var res;
+    if (pendingEditSemesterId) {
+      res = await supabase.from("semesters").update({ name: name, start_date: start, end_date: end }).eq("id", pendingEditSemesterId);
+    } else {
+      res = await supabase.from("semesters").insert({ name: name, start_date: start, end_date: end });
+    }
+    if (res.error) { errBox.textContent = "저장에 실패했습니다: " + res.error.message; errBox.classList.add("show"); return; }
+
+    addSemesterModalOverlay.classList.remove("show");
+    await fetchAllData();
+    renderSemesterTable();
+  });
+
+  var deleteSemesterModalOverlay = document.getElementById("deleteSemesterModalOverlay");
+  var pendingDeleteSemesterId = null;
+  function openDeleteSemesterModal(id) {
+    pendingDeleteSemesterId = id;
+    var s = SEMESTERS.filter(function (x) { return x.id === id; })[0];
+    document.getElementById("deleteSemesterDesc").textContent =
+      (s ? '"' + s.name + '"' : "이 학기") + "를 삭제하면 모든 중간관리자의 목록에서 즉시 사라져요.";
+    deleteSemesterModalOverlay.classList.add("show");
+  }
+  document.getElementById("deleteSemesterCancelBtn").addEventListener("click", function () { deleteSemesterModalOverlay.classList.remove("show"); });
+  document.getElementById("deleteSemesterConfirmBtn").addEventListener("click", async function () {
+    if (!pendingDeleteSemesterId) return;
+    var res = await supabase.from("semesters").delete().eq("id", pendingDeleteSemesterId);
+    deleteSemesterModalOverlay.classList.remove("show");
+    if (res.error) { alert("삭제에 실패했습니다: " + res.error.message); return; }
+    pendingDeleteSemesterId = null;
+    await fetchAllData();
+    renderSemesterTable();
+  });
+
+  /* ---------- 모달 바깥 클릭시 닫기 ---------- */
+  [addRoomModalOverlay, deleteRoomModalOverlay, addManagerModalOverlay, editPermModalOverlay,
+   deleteManagerModalOverlay, addSemesterModalOverlay, deleteSemesterModalOverlay].forEach(function (ov) {
+    ov.addEventListener("click", function (e) { if (e.target === ov) ov.classList.remove("show"); });
+  });
+
+  /* ---------- 로그아웃 ---------- */
+  document.getElementById("logoutBtn").addEventListener("click", async function () {
+    await supabase.auth.signOut();
+    window.location.href = "login.html";
+  });
+
+  /* ================= 초기 렌더 ================= */
+  (async function init() {
+    var ok = await requireFinalAdmin();
+    if (!ok) return;
+    await fetchAllData();
+    initRoomBuildingFilterOptions();
+    renderRoomTable();
+    renderManagerGrid();
+    renderSemesterTable();
+  })();
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+node_modules/
+.DS_Store
+.claude/settings.local.json
+.env
+.env.local
+
+# 프론트엔드 전용 저장소로 분리 - 백엔드/문서/관리자 스크립트는 이 저장소에서 추적하지 않음
+db/
+bulk-create/
+docs/
+supabase/
