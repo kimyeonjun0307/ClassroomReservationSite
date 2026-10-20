@@ -576,6 +576,8 @@
     <div class="approve-row" style="margin-top:8px;">
       <button class="btn-reject" id="cancelMakeupBtn" disabled style="width:100%;">보강으로 인한 취소</button>
     </div>
+
+    <div id="bookingLogBox" style="margin-top:16px; font-size:12px; color:#767D89;"></div>
   </div>
 
 </div>
@@ -1326,6 +1328,38 @@
     renderTimeline();
     renderResvList();
     renderSummary();
+    renderBookingLogBox(b.bookingId || null);
+  }
+
+  /* ================= 처리 이력(감사로그) 보기 ================= */
+  async function renderBookingLogBox(bookingId) {
+    var box = document.getElementById("bookingLogBox");
+    if (!bookingId) { box.innerHTML = ""; return; }
+
+    var res = await supabase.from("booking_logs")
+      .select("action, actor_name, requester_name, reason, created_at")
+      .eq("booking_id", bookingId)
+      .order("created_at", { ascending: false });
+
+    var ACTION_LABEL = {
+      applied: "신청됨", approved: "승인됨", rejected: "거절됨",
+      cancelled_by_requester: "본인이 취소함", cancelled_by_manager: "관리자가 취소함(보강 등)"
+    };
+
+    if (res.error || !res.data || !res.data.length) {
+      box.innerHTML = '<div style="font-weight:700; margin-bottom:4px;">처리 이력</div><div>기록이 없습니다.</div>';
+      return;
+    }
+
+    box.innerHTML = '<div style="font-weight:700; margin-bottom:6px;">처리 이력</div>' +
+      res.data.map(function (log) {
+        var when = String(log.created_at).replace("T", " ").slice(0, 16);
+        return '<div style="padding:6px 0; border-top:1px solid #E7E9ED;">' +
+          '<b>' + (ACTION_LABEL[log.action] || log.action) + '</b> · ' + when + '<br>' +
+          '처리자: ' + (log.actor_name || "-") +
+          (log.reason ? ('<br>사유: ' + log.reason) : '') +
+          '</div>';
+      }).join('');
   }
 
   /* ================= 승인 / 거절 (실제 bookings 업데이트) ================= */
@@ -1346,8 +1380,18 @@
     };
     if (newStatus !== "approved") updatePayload.reject_reason = comment || null;
 
-    var res = await supabase.from("bookings").update(updatePayload).eq("id", b.bookingId);
+    var res = await supabase.from("bookings").update(updatePayload).eq("id", b.bookingId).select().single();
     if (res.error) { alert("처리에 실패했습니다: " + res.error.message); return; }
+
+    var room = ROOMS_BY_KEY[roomKey(state.selection.b, state.selection.r)];
+    await supabase.from("booking_logs").insert({
+      booking_id: b.bookingId, room_id: room ? room.id : null,
+      booking_date: res.data.booking_date, start_time: res.data.start_time, end_time: res.data.end_time,
+      action: newStatus === "approved" ? "approved" : "rejected",
+      actor_id: currentUser.id, actor_name: currentUser.name,
+      requester_id: b.requesterId, requester_name: b.applicant,
+      reason: newStatus !== "approved" ? (comment || null) : null
+    });
 
     var bookingId = b.bookingId;
     var selB = state.selection.b, selR = state.selection.r;
@@ -1439,7 +1483,7 @@
 
     // 이메일 발송에 필요한 정보(날짜/시간/강의실명/신청자 개인이메일)를 직접 다시 조회
     var bkRes = await supabase.from("bookings")
-      .select("booking_date, start_time, end_time, rooms(room_no, buildings!building_id(name)), requester:users!requester_id(name, personal_email)")
+      .select("room_id, booking_date, start_time, end_time, rooms(room_no, buildings!building_id(name)), requester:users!requester_id(name, personal_email)")
       .eq("id", b.bookingId).single();
 
     var updateRes = await supabase.from("bookings").update({
@@ -1459,6 +1503,16 @@
     }
 
     cancelMakeupModalOverlay.classList.remove("show");
+
+    await supabase.from("booking_logs").insert({
+      booking_id: b.bookingId, room_id: bkRes.data ? bkRes.data.room_id : null,
+      booking_date: bkRes.data ? bkRes.data.booking_date : null,
+      start_time: bkRes.data ? bkRes.data.start_time : null, end_time: bkRes.data ? bkRes.data.end_time : null,
+      action: "cancelled_by_manager",
+      actor_id: currentUser.id, actor_name: currentUser.name,
+      requester_id: b.requesterId, requester_name: bkRes.data && bkRes.data.requester ? bkRes.data.requester.name : b.applicant,
+      reason: reason
+    });
 
     if (!bkRes.error && bkRes.data && bkRes.data.requester && bkRes.data.requester.personal_email) {
       var room = bkRes.data.rooms;
@@ -2176,6 +2230,7 @@
     document.getElementById("approveBtn").disabled = true;
     document.getElementById("rejectBtn").disabled = true;
     document.getElementById("cancelMakeupBtn").disabled = true;
+    document.getElementById("bookingLogBox").innerHTML = "";
 
     renderResvList();
   }
@@ -2196,6 +2251,7 @@
     document.getElementById("approveBtn").disabled = true;
     document.getElementById("rejectBtn").disabled = true;
     document.getElementById("cancelMakeupBtn").disabled = true;
+    document.getElementById("bookingLogBox").innerHTML = "";
     renderResvList();
   }
 

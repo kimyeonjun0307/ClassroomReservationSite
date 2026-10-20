@@ -1818,12 +1818,24 @@
       return;
     }
 
-    var insertRes = await supabase.from('bookings').insert(rows);
+    var insertRes = await supabase.from('bookings').insert(rows).select();
     dailyApplyModalOverlay.classList.remove('show');
 
     if (insertRes.error) {
       showApplyMessage('신청에 실패했습니다: ' + insertRes.error.message, 'error');
       return;
+    }
+
+    // 감사로그: 신청 건마다 "누가 언제 신청했는지" 기록 (실패해도 신청 자체는 이미 끝난 상태라 조용히 넘어감)
+    if (insertRes.data && insertRes.data.length) {
+      await supabase.from('booking_logs').insert(insertRes.data.map(function (b) {
+        return {
+          booking_id: b.id, room_id: b.room_id, booking_date: b.booking_date,
+          start_time: b.start_time, end_time: b.end_time, action: 'applied',
+          actor_id: currentAssistant.id, actor_name: currentAssistant.name,
+          requester_id: currentAssistant.id, requester_name: currentAssistant.name
+        };
+      }));
     }
 
     await renderSearchResults(); // 방금 넣은 신청건을 실제 DB 기준으로 다시 불러와 승인대기(노란색)로 표시

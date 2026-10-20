@@ -532,7 +532,15 @@
     var ok = confirm('"' + spaceName + '" (' + usage + ') 예약을 취소하시겠습니까?\n취소한 예약은 되돌릴 수 없습니다.');
     if (!ok) return;
 
-    // 본인이 신청한 예약을 본인이 취소하는 것이므로(관리자 거절이 아님) 이력 남길 필요 없이 바로 삭제
+    // 예약 행 자체는 하드 삭제하지만(마이페이지 목록에서 바로 사라짐), 감사로그는 남겨둠
+    // (booking_logs.booking_id엔 FK가 없어서 예약이 삭제돼도 로그는 그대로 남음)
+    await supabase.from('booking_logs').insert({
+      booking_id: b.id, room_id: b.room_id, booking_date: b.booking_date,
+      start_time: b.start_time, end_time: b.end_time, action: 'cancelled_by_requester',
+      actor_id: currentUser.id, actor_name: currentUser.name,
+      requester_id: currentUser.id, requester_name: currentUser.name
+    });
+
     var res = await supabase.from('bookings').delete().eq('id', bookingId);
     if (res.error) { alert('취소에 실패했습니다: ' + res.error.message); return; }
 
@@ -712,9 +720,19 @@
       headcount: rebookTarget.headcount,
       requester_id: currentUser.id,
       status: 'pending'
-    }]);
+    }]).select();
 
     if (insertRes.error) { showRebookError('재예약 신청에 실패했습니다: ' + insertRes.error.message); return; }
+
+    if (insertRes.data && insertRes.data[0]) {
+      var newBooking = insertRes.data[0];
+      await supabase.from('booking_logs').insert({
+        booking_id: newBooking.id, room_id: newBooking.room_id, booking_date: newBooking.booking_date,
+        start_time: newBooking.start_time, end_time: newBooking.end_time, action: 'applied',
+        actor_id: currentUser.id, actor_name: currentUser.name,
+        requester_id: currentUser.id, requester_name: currentUser.name
+      });
+    }
 
     rebookModalOverlay.classList.remove('show');
     var doneSpaceName = rebookTarget.spaceName;
