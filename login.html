@@ -217,6 +217,21 @@
           <input type="text" id="signupStaffNo" placeholder="사번을 입력하세요" autocomplete="username" inputmode="numeric" required>
         </div>
         <div class="field">
+          <label for="signupEmail">개인 이메일 (인증 필수)</label>
+          <div style="display:flex; gap:8px;">
+            <input type="email" id="signupEmail" placeholder="본인이 실제로 쓰는 이메일" autocomplete="email" style="flex:1;" required>
+            <button type="button" id="sendCodeBtn" class="btn-login" style="width:auto; white-space:nowrap; padding:0 14px;">인증코드 발송</button>
+          </div>
+        </div>
+        <div class="field hidden" id="signupCodeField">
+          <label for="signupCode">인증코드 (6자리)</label>
+          <div style="display:flex; gap:8px;">
+            <input type="text" id="signupCode" placeholder="메일로 받은 6자리 코드" inputmode="numeric" style="flex:1;">
+            <button type="button" id="checkCodeBtn" class="btn-login" style="width:auto; white-space:nowrap; padding:0 14px;">확인</button>
+          </div>
+          <p class="sub" id="emailVerifiedNotice" style="margin:8px 0 0; color: var(--success);"></p>
+        </div>
+        <div class="field">
           <label for="signupPw">비밀번호</label>
           <input type="password" id="signupPw" placeholder="6자 이상 입력하세요" autocomplete="new-password" minlength="6" required>
         </div>
@@ -226,7 +241,7 @@
         </div>
         <p class="sub" style="margin: -4px 0 14px;">가입 후에는 예약자(조교) 권한으로 시작합니다. 중간관리자/최종관리자 권한은 최종관리자가 별도로 부여합니다.</p>
 
-        <button type="submit" class="btn-login" id="btnSignup">회원가입</button>
+        <button type="submit" class="btn-login" id="btnSignup" disabled>회원가입 (이메일 인증 필요)</button>
       </form>
 
       <div class="divider">또는</div>
@@ -290,6 +305,100 @@
   // 가입 시 role은 항상 'assistant'로 고정되므로 건물 선택 UI는 제거됨.
   // 중간관리자/최종관리자 승격은 최종관리자가 나중에 users 테이블을 직접 수정.
 
+  // ---------------- 회원가입: 개인 이메일 인증 (신규 가입자부터 필수) ----------------
+  var emailVerified = false;
+  var signupEmailInput = document.getElementById('signupEmail');
+  var signupCodeField = document.getElementById('signupCodeField');
+  var signupCodeInput = document.getElementById('signupCode');
+  var sendCodeBtn = document.getElementById('sendCodeBtn');
+  var checkCodeBtn = document.getElementById('checkCodeBtn');
+  var btnSignup = document.getElementById('btnSignup');
+  var emailVerifiedNotice = document.getElementById('emailVerifiedNotice');
+  var signupMsg = document.getElementById('signupMsg');
+
+  function setEmailVerified(v) {
+    emailVerified = v;
+    btnSignup.disabled = !v;
+    btnSignup.textContent = v ? '회원가입' : '회원가입 (이메일 인증 필요)';
+    emailVerifiedNotice.textContent = v ? '✓ 인증 완료되었습니다.' : '';
+  }
+
+  // 인증 완료 후 이메일을 바꾸면 다시 인증해야 함
+  signupEmailInput.addEventListener('input', function () {
+    if (emailVerified) setEmailVerified(false);
+  });
+
+  sendCodeBtn.addEventListener('click', async function () {
+    var email = signupEmailInput.value.trim();
+    if (!email) {
+      showMsg(signupMsg, '개인 이메일을 입력해주세요.', 'error');
+      signupMsg.classList.remove('hidden');
+      return;
+    }
+
+    sendCodeBtn.disabled = true;
+    sendCodeBtn.textContent = '발송 중...';
+    signupMsg.classList.add('hidden');
+
+    var res = await supabase.functions.invoke('send-verification-code', { body: { email: email } });
+
+    if (res.error || (res.data && res.data.error)) {
+      var errMsg = (res.data && res.data.error) || res.error.message;
+      showMsg(signupMsg, '인증코드 발송에 실패했습니다: ' + errMsg, 'error');
+      signupMsg.classList.remove('hidden');
+      sendCodeBtn.disabled = false;
+      sendCodeBtn.textContent = '인증코드 발송';
+      return;
+    }
+
+    signupCodeField.classList.remove('hidden');
+    showMsg(signupMsg, '인증코드를 발송했습니다. 메일을 확인해주세요.', 'success');
+    signupMsg.classList.remove('hidden');
+
+    // 60초 재발송 쿨다운
+    var remaining = 60;
+    sendCodeBtn.textContent = '재발송 (' + remaining + 's)';
+    var timer = setInterval(function () {
+      remaining -= 1;
+      if (remaining <= 0) {
+        clearInterval(timer);
+        sendCodeBtn.disabled = false;
+        sendCodeBtn.textContent = '인증코드 재발송';
+      } else {
+        sendCodeBtn.textContent = '재발송 (' + remaining + 's)';
+      }
+    }, 1000);
+  });
+
+  checkCodeBtn.addEventListener('click', async function () {
+    var email = signupEmailInput.value.trim();
+    var code = signupCodeInput.value.trim();
+    if (!code) {
+      showMsg(signupMsg, '인증코드를 입력해주세요.', 'error');
+      signupMsg.classList.remove('hidden');
+      return;
+    }
+
+    checkCodeBtn.disabled = true;
+    checkCodeBtn.textContent = '확인 중...';
+
+    var res = await supabase.functions.invoke('verify-email-code', { body: { email: email, code: code } });
+
+    checkCodeBtn.disabled = false;
+    checkCodeBtn.textContent = '확인';
+
+    if (res.error || !res.data || !res.data.verified) {
+      var reason = (res.data && res.data.reason) || (res.error && res.error.message) || '인증에 실패했습니다.';
+      showMsg(signupMsg, reason, 'error');
+      signupMsg.classList.remove('hidden');
+      setEmailVerified(false);
+      return;
+    }
+
+    setEmailVerified(true);
+    signupMsg.classList.add('hidden');
+  });
+
   // ---------------- 로그인 ----------------
   document.getElementById('loginForm').addEventListener('submit', async function (e) {
     e.preventDefault();
@@ -342,6 +451,7 @@
 
     var name = document.getElementById('signupName').value.trim();
     var staffNo = document.getElementById('signupStaffNo').value.trim();
+    var personalEmail = signupEmailInput.value.trim();
     var password = document.getElementById('signupPw').value;
     var departmentId = document.getElementById('signupDept').value;
 
@@ -352,6 +462,11 @@
     }
     if (!departmentId) {
       showMsg(msg, '소속부서를 선택해주세요.', 'error');
+      msg.classList.remove('hidden');
+      return;
+    }
+    if (!emailVerified) {
+      showMsg(msg, '개인 이메일 인증을 먼저 완료해주세요.', 'error');
       msg.classList.remove('hidden');
       return;
     }
@@ -381,11 +496,22 @@
       return;
     }
 
+    // 인증된 개인 이메일을 users 행에 저장. 가입 직후엔 보통 바로 로그인 세션이 생기므로
+    // "본인 정보 수정 가능" RLS 정책(db/migrations/2026-10-20_*.sql)으로 본인 행을 고칠 수 있음.
+    // 세션이 아직 없는 경우(이메일 확인 설정이 켜져 있는 경우)엔 조용히 건너뛰고, 이땐
+    // 최종관리자가 나중에 Supabase 대시보드에서 채워줘야 함.
+    if (signUpRes.data.session && signUpRes.data.user) {
+      await supabase.from('users').update({ personal_email: personalEmail }).eq('id', signUpRes.data.user.id);
+    }
+
     showMsg(msg, '가입이 완료됐습니다. 로그인해주세요.', 'success');
     msg.classList.remove('hidden');
     setTimeout(function () {
       signupCard.classList.add('hidden');
       loginCard.classList.remove('hidden');
+      document.getElementById('signupForm').reset();
+      signupCodeField.classList.add('hidden');
+      setEmailVerified(false);
     }, 1500);
   });
 

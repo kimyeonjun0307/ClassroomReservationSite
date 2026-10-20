@@ -78,6 +78,21 @@
     position: absolute; top: -4px; right: -8px; width: 7px; height: 7px; border-radius: 50%;
     background: #E4572E; border: 1.5px solid var(--primary);
   }
+  .bell-dropdown {
+    display: none; position: absolute; top: calc(100% + 14px); right: -10px; width: 310px;
+    max-height: 360px; overflow-y: auto; background: #fff; color: var(--gray-900);
+    border-radius: var(--radius-md); box-shadow: var(--shadow-lg); padding: 8px 0; z-index: 100;
+    cursor: default; font-size: 12.5px;
+  }
+  .bell-dropdown.show { display: block; }
+  .bell-dropdown .bell-title {
+    padding: 8px 16px; font-size: 11.5px; font-weight: 700; color: var(--gray-500);
+    border-bottom: 1px solid var(--gray-100);
+  }
+  .bell-dropdown .bell-item { padding: 10px 16px; border-bottom: 1px solid var(--gray-100); line-height: 1.5; }
+  .bell-dropdown .bell-item:last-child { border-bottom: none; }
+  .bell-dropdown .bell-sub { color: var(--gray-500); font-size: 11.5px; }
+  .bell-dropdown .bell-empty { padding: 20px 16px; color: var(--gray-300); text-align: center; }
 
   .subbar {
     background: #fff; border-bottom: 1px solid var(--border);
@@ -445,7 +460,10 @@
   <div class="title">🏫 동서대학교 강의실 예약 <span class="badge">중간관리자</span></div>
   <div class="menu">
     <span class="manager-name" id="headerManagerName"></span>
-    <span>알림<span class="bell-dot"></span></span>
+    <span onclick="window.location.href='mypage.html'">마이페이지</span>
+    <span id="bellToggle" style="position:relative;">알림<span class="bell-dot" id="bellDot" style="display:none;"></span>
+      <div id="bellDropdown" class="bell-dropdown"></div>
+    </span>
     <span id="logoutBtn">로그아웃</span>
   </div>
 </header>
@@ -555,6 +573,9 @@
       <button class="btn-approve" id="approveBtn" disabled>예약 승인</button>
       <button class="btn-reject" id="rejectBtn" disabled>예약 거절</button>
     </div>
+    <div class="approve-row" style="margin-top:8px;">
+      <button class="btn-reject" id="cancelMakeupBtn" disabled style="width:100%;">보강으로 인한 취소</button>
+    </div>
   </div>
 
 </div>
@@ -588,6 +609,23 @@
     <div class="modal-actions">
       <button class="modal-btn-cancel" id="modalCancelBtn">취소</button>
       <button class="modal-btn-confirm" id="modalConfirmBtn">거절</button>
+    </div>
+  </div>
+</div>
+
+<!-- 보강으로 인한 취소 모달 -->
+<div class="modal-overlay" id="cancelMakeupModalOverlay">
+  <div class="modal-box">
+    <div class="modal-title">보강으로 인한 취소</div>
+    <div class="modal-desc">이미 승인된 예약을 취소합니다. 신청자의 개인 이메일로 취소 안내가 발송됩니다. 보강 수업 정보 등 취소 사유를 꼭 입력해주세요.</div>
+    <div class="edit-field">
+      <label>취소 사유 (필수)</label>
+      <textarea id="cancelMakeupReasonInput" placeholder="예: 10/27(화) 2교시 OOO 과목 보강 수업으로 인한 취소"></textarea>
+    </div>
+    <div class="error-box" id="cancelMakeupErrorBox" style="display:none; color:#C13A3A; font-size:12.5px; margin-top:-4px; margin-bottom:10px;"></div>
+    <div class="modal-actions">
+      <button class="modal-btn-cancel" id="cancelMakeupModalCancelBtn">취소</button>
+      <button class="modal-btn-confirm" id="cancelMakeupModalConfirmBtn">취소 처리</button>
     </div>
   </div>
 </div>
@@ -1265,23 +1303,24 @@
     var banner = document.getElementById("statusBanner");
     var approveBtn = document.getElementById("approveBtn");
     var rejectBtn = document.getElementById("rejectBtn");
+    var cancelMakeupBtn = document.getElementById("cancelMakeupBtn");
 
     if (b.status === "pending") {
       banner.className = "status-banner show locked";
       banner.textContent = "관리자 승인이 필요한 예약 건입니다.";
-      approveBtn.disabled = false; rejectBtn.disabled = false;
+      approveBtn.disabled = false; rejectBtn.disabled = false; cancelMakeupBtn.disabled = true;
     } else if (b.status === "approved") {
       banner.className = "status-banner show approved";
       banner.textContent = "정규 수업(고정 일정)으로, 승인/거절 대상이 아닙니다.";
-      approveBtn.disabled = true; rejectBtn.disabled = true;
+      approveBtn.disabled = true; rejectBtn.disabled = true; cancelMakeupBtn.disabled = true;
     } else if (b.status === "confirmed") {
       banner.className = "status-banner show approved";
       banner.textContent = "이미 승인 완료된 예약입니다.";
-      approveBtn.disabled = true; rejectBtn.disabled = false;
+      approveBtn.disabled = true; rejectBtn.disabled = false; cancelMakeupBtn.disabled = false;
     } else {
       banner.className = "status-banner show rejected";
       banner.textContent = "거절 처리된 예약입니다.";
-      approveBtn.disabled = false; rejectBtn.disabled = true;
+      approveBtn.disabled = false; rejectBtn.disabled = true; cancelMakeupBtn.disabled = true;
     }
 
     renderTimeline();
@@ -1337,6 +1376,117 @@
   }
   function closeRejectModal() { rejectModalOverlay.classList.remove("show"); }
   document.getElementById("modalCancelBtn").addEventListener("click", closeRejectModal);
+
+  /* ================= 알림(🔔): 내 담당 강의실의 승인 대기 건만 모아서 보여줌 ================= */
+  var bellToggle = document.getElementById("bellToggle");
+  var bellDropdown = document.getElementById("bellDropdown");
+
+  function renderBellDropdown() {
+    if (!PENDING_BOOKINGS.length) {
+      bellDropdown.innerHTML = '<div class="bell-empty">새로운 알림이 없습니다</div>';
+      return;
+    }
+    bellDropdown.innerHTML = '<div class="bell-title">내 담당 강의실 승인 대기 (' + PENDING_BOOKINGS.length + "건)</div>" +
+      PENDING_BOOKINGS.slice(0, 8).map(function (row) {
+        return '<div class="bell-item">' + displayRoomName(row.b, row.r) + " · " + shortDateLabel(row.bookingDate) + " " +
+          timeLabel(row.start) + "~" + timeLabel(row.end) +
+          '<br><span class="bell-sub">' + row.applicant + " · " + row.sub + "</span></div>";
+      }).join("");
+  }
+
+  bellToggle.addEventListener("click", function (e) {
+    e.stopPropagation();
+    renderBellDropdown();
+    bellDropdown.classList.toggle("show");
+    document.getElementById("bellDot").style.display = "none"; // 알림창을 열어서 확인한 순간 빨간 점은 끔
+  });
+  bellDropdown.addEventListener("click", function (e) { e.stopPropagation(); });
+  document.addEventListener("click", function () { bellDropdown.classList.remove("show"); });
+
+  /* ================= 보강으로 인한 취소 (이미 승인된 예약만 대상, 거절과는 별개 동작) ================= */
+  var cancelMakeupModalOverlay = document.getElementById("cancelMakeupModalOverlay");
+  var cancelMakeupReasonInput = document.getElementById("cancelMakeupReasonInput");
+  var cancelMakeupErrorBox = document.getElementById("cancelMakeupErrorBox");
+  var cancelMakeupConfirmBtn = document.getElementById("cancelMakeupModalConfirmBtn");
+
+  document.getElementById("cancelMakeupBtn").addEventListener("click", function () {
+    if (!state.selection.b || state.selection.idx === null) return;
+    cancelMakeupReasonInput.value = "";
+    cancelMakeupErrorBox.style.display = "none";
+    cancelMakeupModalOverlay.classList.add("show");
+  });
+  document.getElementById("cancelMakeupModalCancelBtn").addEventListener("click", function () {
+    cancelMakeupModalOverlay.classList.remove("show");
+  });
+  cancelMakeupModalOverlay.addEventListener("click", function (e) {
+    if (e.target === cancelMakeupModalOverlay) cancelMakeupModalOverlay.classList.remove("show");
+  });
+
+  cancelMakeupConfirmBtn.addEventListener("click", async function () {
+    var reason = cancelMakeupReasonInput.value.trim();
+    if (!reason) {
+      cancelMakeupErrorBox.textContent = "취소 사유(보강 수업 정보 등)를 입력해주세요.";
+      cancelMakeupErrorBox.style.display = "block";
+      return;
+    }
+    if (!state.selection.b || state.selection.idx === null) return;
+    var blocks = scheduleFor(state.selection.b, state.selection.r);
+    var b = blocks[state.selection.idx];
+    if (!b || !b.bookingId) return;
+
+    cancelMakeupConfirmBtn.disabled = true;
+    cancelMakeupConfirmBtn.textContent = "처리 중...";
+
+    // 이메일 발송에 필요한 정보(날짜/시간/강의실명/신청자 개인이메일)를 직접 다시 조회
+    var bkRes = await supabase.from("bookings")
+      .select("booking_date, start_time, end_time, rooms(room_no, buildings!building_id(name)), requester:users!requester_id(name, personal_email)")
+      .eq("id", b.bookingId).single();
+
+    var updateRes = await supabase.from("bookings").update({
+      status: "cancelled",
+      reject_reason: reason,
+      reviewed_by: currentUser.id,
+      reviewed_at: new Date().toISOString()
+    }).eq("id", b.bookingId);
+
+    cancelMakeupConfirmBtn.disabled = false;
+    cancelMakeupConfirmBtn.textContent = "취소 처리";
+
+    if (updateRes.error) {
+      cancelMakeupErrorBox.textContent = "처리에 실패했습니다: " + updateRes.error.message;
+      cancelMakeupErrorBox.style.display = "block";
+      return;
+    }
+
+    cancelMakeupModalOverlay.classList.remove("show");
+
+    if (!bkRes.error && bkRes.data && bkRes.data.requester && bkRes.data.requester.personal_email) {
+      var room = bkRes.data.rooms;
+      var roomName = room ? ((room.buildings ? room.buildings.name + " " : "") + room.room_no + "호") : "-";
+      await supabase.functions.invoke("send-cancellation-email", {
+        body: {
+          to: bkRes.data.requester.personal_email,
+          requester_name: bkRes.data.requester.name,
+          room_name: roomName,
+          booking_date: bkRes.data.booking_date,
+          start_time: bkRes.data.start_time,
+          end_time: bkRes.data.end_time,
+          reason: reason
+        }
+      });
+    } else {
+      alert("취소 처리되었습니다. (이 예약자는 등록된 개인 이메일이 없어 알림 메일은 보내지 못했습니다)");
+    }
+
+    var bookingId = b.bookingId;
+    var selB = state.selection.b, selR = state.selection.r;
+    await fetchSchedules();
+    renderTimelineAndPanels();
+    var newBlocks = scheduleFor(selB, selR);
+    var newIdx = newBlocks.findIndex(function (x) { return x.bookingId === bookingId; });
+    if (newIdx !== -1) selectReservation(selB, selR, newIdx);
+    else renderResvList();
+  });
   rejectModalOverlay.addEventListener("click", function (e) { if (e.target === rejectModalOverlay) closeRejectModal(); });
   document.getElementById("modalConfirmBtn").addEventListener("click", function () { handleDecision("rejected"); closeRejectModal(); });
 
@@ -1912,6 +2062,7 @@
     document.getElementById("sumTotal").textContent = total + "건";
     document.getElementById("sumPending").textContent = PENDING_BOOKINGS.length + "건";
     document.getElementById("subbarPendingBadge").textContent = "승인 대기 " + PENDING_BOOKINGS.length + "건";
+    document.getElementById("bellDot").style.display = PENDING_BOOKINGS.length ? "block" : "none";
     renderPendingBottomList();
     renderBuildingGrid();
   }
@@ -2024,6 +2175,7 @@
     document.getElementById("statusBanner").className = "status-banner";
     document.getElementById("approveBtn").disabled = true;
     document.getElementById("rejectBtn").disabled = true;
+    document.getElementById("cancelMakeupBtn").disabled = true;
 
     renderResvList();
   }
@@ -2043,6 +2195,7 @@
     document.getElementById("statusBanner").className = "status-banner";
     document.getElementById("approveBtn").disabled = true;
     document.getElementById("rejectBtn").disabled = true;
+    document.getElementById("cancelMakeupBtn").disabled = true;
     renderResvList();
   }
 

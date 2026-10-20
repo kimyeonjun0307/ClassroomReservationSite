@@ -41,6 +41,25 @@
   header .menu { font-size: 13px; color: rgba(255,255,255,0.72); display: flex; align-items: center; }
   header .menu span { margin-left: 20px; cursor: pointer; transition: color .12s; }
   header .menu span:hover { color: #fff; }
+  .bell-dot {
+    display: none; position: absolute; top: -4px; right: -8px; width: 7px; height: 7px; border-radius: 50%;
+    background: #E4572E; border: 1.5px solid var(--primary);
+  }
+  .bell-dropdown {
+    display: none; position: absolute; top: calc(100% + 14px); right: -10px; width: 320px;
+    max-height: 380px; overflow-y: auto; background: #fff; color: var(--gray-900);
+    border-radius: var(--radius-md); box-shadow: var(--shadow-lg); padding: 8px 0; z-index: 100;
+    cursor: default; font-size: 12.5px;
+  }
+  .bell-dropdown.show { display: block; }
+  .bell-dropdown .bell-title {
+    padding: 8px 16px; font-size: 11.5px; font-weight: 700; color: var(--gray-500);
+    border-bottom: 1px solid var(--gray-100);
+  }
+  .bell-dropdown .bell-item { padding: 10px 16px; border-bottom: 1px solid var(--gray-100); line-height: 1.5; }
+  .bell-dropdown .bell-item:last-child { border-bottom: none; }
+  .bell-dropdown .bell-reason { color: var(--danger); font-size: 11.5px; margin-top: 2px; }
+  .bell-dropdown .bell-empty { padding: 20px 16px; color: var(--gray-300); text-align: center; }
 
   .layout {
     display: grid;
@@ -332,7 +351,9 @@
 <header>
   <div class="title">🏫 동서대학교 강의실 예약</div>
   <div class="menu">
-    <span>🔔 알림</span>
+    <span id="bellToggle" style="position:relative;">🔔 알림<span class="bell-dot" id="bellDot"></span>
+      <div id="bellDropdown" class="bell-dropdown"></div>
+    </span>
     <span id="inquiryOpenBtn" style="cursor:pointer;">📩 문의하기</span>
     <a href="mypage.html" style="text-decoration: none; color: inherit;"><span>마이페이지</span></a>
     <a href="#" id="logoutLink" style="text-decoration: none; color: inherit;"><span>로그아웃</span></a>
@@ -477,7 +498,8 @@
 
     <div class="guideline">
       ※ 실습실 내 음료 반입 금지<br>
-      ※ 대여 10분 전 카카오톡 QR코드 발송
+      ※ 대여 10분 전 카카오톡 QR코드 발송<br>
+      ※ 승인된 예약이라도 보강 수업 등록 등으로 인해 취소될 수 있습니다
     </div>
 
     <div class="apply-btn-row">
@@ -559,7 +581,7 @@
       window.location.href = 'login.html';
       return false;
     }
-    var profileRes = await supabase.from('users').select('id, name, role, department_id').eq('id', sessionRes.data.session.user.id).single();
+    var profileRes = await supabase.from('users').select('id, name, role, department_id, personal_email').eq('id', sessionRes.data.session.user.id).single();
     if (profileRes.error || !profileRes.data) {
       window.location.href = 'login.html';
       return false;
@@ -567,6 +589,93 @@
     currentAssistant = profileRes.data;
     return true;
   }
+
+  /* ================= 알림(🔔): 내 예약 중 최근 거절/취소된 건만 모아서 보여줌 ================= */
+  var MY_NOTIFICATIONS = [];
+  var bellToggle = document.getElementById('bellToggle');
+  var bellDropdown = document.getElementById('bellDropdown');
+  var bellDot = document.getElementById('bellDot');
+
+  // 알림 "지우기"는 예약 자체를 지우는 게 아니라, 이 브라우저에서 "확인했다"고 숨기는 용도
+  // (마이페이지의 예약 이력엔 그대로 남아있어야 하므로 localStorage에만 기록)
+  function dismissedKey() { return 'dismissedNotif_' + (currentAssistant ? currentAssistant.id : ''); }
+  function loadDismissedSet() {
+    try { return new Set(JSON.parse(localStorage.getItem(dismissedKey()) || '[]')); }
+    catch (e) { return new Set(); }
+  }
+  function saveDismissedSet(set) {
+    localStorage.setItem(dismissedKey(), JSON.stringify(Array.from(set)));
+  }
+
+  async function loadMyNotifications() {
+    if (!currentAssistant) return;
+    var res = await supabase.from('bookings')
+      .select('*, rooms(room_no, buildings!building_id(name))')
+      .eq('requester_id', currentAssistant.id)
+      .in('status', ['rejected', 'cancelled'])
+      .order('reviewed_at', { ascending: false })
+      .limit(8);
+    var all = (!res.error && res.data) ? res.data : [];
+    var dismissed = loadDismissedSet();
+    MY_NOTIFICATIONS = all.filter(function (b) { return !dismissed.has(b.id); });
+    bellDot.style.display = MY_NOTIFICATIONS.length ? 'block' : 'none';
+  }
+
+  function renderBellDropdown() {
+    if (!MY_NOTIFICATIONS.length) {
+      bellDropdown.innerHTML = '<div class="bell-empty">새로운 알림이 없습니다</div>';
+      return;
+    }
+    bellDropdown.innerHTML =
+      '<div class="bell-title" style="display:flex; justify-content:space-between; align-items:center;">' +
+        '<span>내 예약 관련 알림</span>' +
+        '<span data-dismiss-all style="cursor:pointer; font-weight:400; text-decoration:underline;">모두 지우기</span>' +
+      '</div>' +
+      MY_NOTIFICATIONS.map(function (b) {
+        var room = b.rooms ? ((b.rooms.buildings ? b.rooms.buildings.name + ' ' : '') + b.rooms.room_no + '호') : '-';
+        var label = b.status === 'cancelled' ? '예약이 취소되었습니다' : '예약이 거절되었습니다';
+        return '<div class="bell-item" style="position:relative;">' +
+          '<span data-dismiss-id="' + b.id + '" style="position:absolute; top:8px; right:12px; cursor:pointer; color:var(--gray-300);">✕</span>' +
+          room + ' · ' + b.booking_date + ' ' +
+          String(b.start_time).slice(0, 5) + '~' + String(b.end_time).slice(0, 5) +
+          '<br>' + label + (b.reject_reason ? ('<div class="bell-reason">사유: ' + b.reject_reason + '</div>') : '') +
+          '</div>';
+      }).join('');
+  }
+
+  bellToggle.addEventListener('click', async function (e) {
+    e.stopPropagation();
+    await loadMyNotifications();
+    renderBellDropdown();
+    bellDropdown.classList.toggle('show');
+    bellDot.style.display = 'none'; // 알림창을 열어서 확인한 순간 빨간 점은 끔 (내용 자체는 지우기 전까지 유지)
+  });
+  bellDropdown.addEventListener('click', function (e) {
+    e.stopPropagation();
+
+    var dismissAllEl = e.target.closest('[data-dismiss-all]');
+    if (dismissAllEl) {
+      var all = loadDismissedSet();
+      MY_NOTIFICATIONS.forEach(function (b) { all.add(b.id); });
+      saveDismissedSet(all);
+      MY_NOTIFICATIONS = [];
+      bellDot.style.display = 'none';
+      renderBellDropdown();
+      return;
+    }
+
+    var dismissEl = e.target.closest('[data-dismiss-id]');
+    if (dismissEl) {
+      var id = parseInt(dismissEl.getAttribute('data-dismiss-id'), 10);
+      var set = loadDismissedSet();
+      set.add(id);
+      saveDismissedSet(set);
+      MY_NOTIFICATIONS = MY_NOTIFICATIONS.filter(function (b) { return b.id !== id; });
+      bellDot.style.display = MY_NOTIFICATIONS.length ? 'block' : 'none';
+      renderBellDropdown();
+    }
+  });
+  document.addEventListener('click', function () { bellDropdown.classList.remove('show'); });
 
   // DB에서 채워지는 값들 (fetchAppData()가 페이지 로드 시 채움)
   var VALID_BUILDINGS = [];       // 건물명 목록 (status=true인 건물만)
@@ -1636,6 +1745,11 @@
   var pendingCancelTarget = null; // { roomKey, day, start, end }
 
   document.getElementById('dailyApplyBtn').addEventListener('click', function () {
+    if (!currentAssistant || !currentAssistant.personal_email) {
+      showApplyMessage('개인 이메일을 등록(+인증)해야 예약을 신청할 수 있습니다. 마이페이지 > 회원정보 수정에서 등록해주세요.', 'error');
+      return;
+    }
+
     var slotBox = document.getElementById('selectedSlotBox');
     if (slotBox.style.display === 'none') {
       showApplyMessage('먼저 강의실 상세보기에서 예약할 시간대를 드래그로 선택해주세요.', 'error');
@@ -1663,6 +1777,11 @@
     }
     if (!currentAssistant) {
       showApplyMessage('로그인 정보를 확인할 수 없습니다. 다시 로그인해주세요.', 'error');
+      dailyApplyModalOverlay.classList.remove('show');
+      return;
+    }
+    if (!currentAssistant.personal_email) {
+      showApplyMessage('개인 이메일을 등록(+인증)해야 예약을 신청할 수 있습니다. 마이페이지 > 회원정보 수정에서 등록해주세요.', 'error');
       dailyApplyModalOverlay.classList.remove('show');
       return;
     }
@@ -1871,6 +1990,7 @@
     var ok = await requireSessionAndLoadAssistant();
     if (!ok) return; // 로그인 안 돼있으면 login.html로 이동됨
     await fetchAppData();
+    loadMyNotifications();
   })();
 </script>
 

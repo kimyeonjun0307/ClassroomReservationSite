@@ -201,12 +201,16 @@
       <div class="profile-dept" id="profileDept">-</div>
       <div class="profile-details">
         <div class="detail-item">
-          <span class="detail-label">이메일</span>
+          <span class="detail-label">사번(학번)</span>
           <span class="detail-value" id="profileEmail">-</span>
         </div>
         <div class="detail-item">
           <span class="detail-label">연락처</span>
           <span class="detail-value" id="profilePhone">-</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">개인 이메일 (알림 수신용)</span>
+          <span class="detail-value" id="profilePersonalEmail">-</span>
         </div>
         <div class="detail-item">
           <span class="detail-label">소속</span>
@@ -218,7 +222,7 @@
         </div>
       </div>
     </div>
-    <button class="profile-edit-btn" onclick="alert('회원정보 수정 기능은 아직 준비 중입니다.')">회원정보 수정</button>
+    <button class="profile-edit-btn" onclick="openPwConfirmModal()">회원정보 수정</button>
   </div>
 
   <div class="summary-cards">
@@ -274,6 +278,58 @@
     <tbody id="bookingTbody"></tbody>
   </table>
 </main>
+
+<!-- 회원정보 수정: 1단계 - 비밀번호 재확인 모달 -->
+<div class="modal-overlay" id="pwConfirmModalOverlay">
+  <div class="modal-box">
+    <div class="modal-title">비밀번호 확인</div>
+    <div class="modal-desc">보안을 위해 회원정보를 수정하기 전에 현재 비밀번호를 한 번 더 입력해주세요.</div>
+    <div class="modal-field">
+      <label>비밀번호</label>
+      <input type="password" id="pwConfirmInput" autocomplete="current-password">
+    </div>
+    <div class="modal-error-box" id="pwConfirmErrorBox"></div>
+    <div class="modal-actions">
+      <button type="button" class="modal-btn-cancel" id="pwConfirmCancelBtn">취소</button>
+      <button type="button" class="modal-btn-confirm" id="pwConfirmConfirmBtn">확인</button>
+    </div>
+  </div>
+</div>
+
+<!-- 회원정보 수정: 2단계 - 실제 수정 모달 -->
+<div class="modal-overlay" id="editProfileModalOverlay">
+  <div class="modal-box">
+    <div class="modal-title">회원정보 수정</div>
+    <div class="modal-desc">이름·연락처·개인 이메일을 수정할 수 있습니다. (사번·소속·역할은 변경할 수 없습니다)</div>
+    <div class="modal-field">
+      <label>이름</label>
+      <input type="text" id="editProfileNameInput">
+    </div>
+    <div class="modal-field">
+      <label>연락처</label>
+      <input type="text" id="editProfilePhoneInput" placeholder="예: 010-1234-5678">
+    </div>
+    <div class="modal-field">
+      <label>개인 이메일 (알림 수신용)</label>
+      <div style="display:flex; gap:8px;">
+        <input type="email" id="editProfileEmailInput" placeholder="본인이 실제로 쓰는 이메일" style="flex:1;">
+        <button type="button" id="editProfileSendCodeBtn" class="modal-btn-confirm" style="flex:none; width:auto; white-space:nowrap; padding:0 12px; height:38px;">인증코드 발송</button>
+      </div>
+      <div id="editProfileCodeField" style="display:none; margin-top:10px;">
+        <div style="display:flex; gap:8px;">
+          <input type="text" id="editProfileCodeInput" placeholder="메일로 받은 6자리 코드" inputmode="numeric" style="flex:1;">
+          <button type="button" id="editProfileCheckCodeBtn" class="modal-btn-confirm" style="flex:none; width:auto; white-space:nowrap; padding:0 12px; height:38px;">확인</button>
+        </div>
+      </div>
+      <p id="editProfileEmailStatus" style="margin:8px 0 0; font-size:12.5px; color:var(--success);"></p>
+    </div>
+    <div class="modal-error-box" id="editProfileErrorBox"></div>
+    <div class="modal-actions">
+      <button type="button" class="modal-btn-cancel" id="editProfileCancelBtn">취소</button>
+      <button type="button" class="modal-btn-confirm" id="editProfileSaveBtn">저장</button>
+    </div>
+  </div>
+</div>
 
 <!-- 재예약 확인 모달 -->
 <div class="modal-overlay" id="rebookModalOverlay">
@@ -366,7 +422,7 @@
     var sessionRes = await supabase.auth.getSession();
     if (!sessionRes.data.session) { window.location.href = 'login.html'; return false; }
 
-    var profileRes = await supabase.from('users').select('id, name, role, department_id, phone, departments(name)').eq('id', sessionRes.data.session.user.id).single();
+    var profileRes = await supabase.from('users').select('id, name, role, department_id, phone, personal_email, staff_no, departments(name)').eq('id', sessionRes.data.session.user.id).single();
     if (profileRes.error || !profileRes.data) { window.location.href = 'login.html'; return false; }
 
     currentUser = profileRes.data;
@@ -382,8 +438,9 @@
     document.getElementById('profileName').textContent = currentUser.name;
     document.getElementById('profileDept').textContent = currentUser.deptName;
     document.getElementById('profileDept2').textContent = currentUser.deptName;
-    document.getElementById('profileEmail').textContent = currentUser.email;
+    document.getElementById('profileEmail').textContent = currentUser.staff_no || '-';
     document.getElementById('profilePhone').textContent = currentUser.phone || '-';
+    document.getElementById('profilePersonalEmail').textContent = currentUser.personal_email || '미등록 (회원정보 수정에서 등록)';
     document.getElementById('profileRole').textContent = ROLE_LABEL[currentUser.role] || currentUser.role;
   }
 
@@ -611,6 +668,11 @@
     if (!rebookTarget) { rebookModalOverlay.classList.remove('show'); return; }
     hideRebookError();
 
+    if (!currentUser.personal_email) {
+      showRebookError('개인 이메일을 등록(+인증)해야 예약을 신청할 수 있습니다. "회원정보 수정"에서 먼저 등록해주세요.');
+      return;
+    }
+
     var dateStr = rebookDateInput.value;
     if (!dateStr) { showRebookError('예약 날짜를 선택해주세요.'); return; }
     var todayStr = dateToISO(new Date());
@@ -664,8 +726,197 @@
     showPageMessage(doneSpaceName + ' 예약이 재신청되었습니다. 담당 중간관리자 승인 후 확정됩니다.', 'success');
   });
 
+  /* ---------- 회원정보 수정 (1단계: 비밀번호 재확인 -> 2단계: 이름/연락처 수정) ---------- */
+  var pwConfirmModalOverlay = document.getElementById('pwConfirmModalOverlay');
+  var pwConfirmInput = document.getElementById('pwConfirmInput');
+  var pwConfirmErrorBox = document.getElementById('pwConfirmErrorBox');
+  var pwConfirmConfirmBtn = document.getElementById('pwConfirmConfirmBtn');
+
+  var editProfileModalOverlay = document.getElementById('editProfileModalOverlay');
+  var editProfileNameInput = document.getElementById('editProfileNameInput');
+  var editProfilePhoneInput = document.getElementById('editProfilePhoneInput');
+  var editProfileEmailInput = document.getElementById('editProfileEmailInput');
+  var editProfileCodeField = document.getElementById('editProfileCodeField');
+  var editProfileCodeInput = document.getElementById('editProfileCodeInput');
+  var editProfileSendCodeBtn = document.getElementById('editProfileSendCodeBtn');
+  var editProfileCheckCodeBtn = document.getElementById('editProfileCheckCodeBtn');
+  var editProfileEmailStatus = document.getElementById('editProfileEmailStatus');
+  var editProfileErrorBox = document.getElementById('editProfileErrorBox');
+  var editProfileSaveBtn = document.getElementById('editProfileSaveBtn');
+
+  // 모달을 열었을 때의 개인이메일 값(변경 여부 판단 기준)과, 새 값에 대한 인증 완료 여부
+  var originalPersonalEmail = '';
+  var profileEmailVerified = false;
+
+  editProfileEmailInput.addEventListener('input', function () {
+    profileEmailVerified = false;
+    editProfileEmailStatus.textContent = '';
+    editProfileCodeField.style.display = 'none';
+  });
+
+  editProfileSendCodeBtn.addEventListener('click', async function () {
+    var email = editProfileEmailInput.value.trim();
+    if (!email) {
+      editProfileErrorBox.textContent = '이메일을 입력해주세요.';
+      editProfileErrorBox.style.display = 'block';
+      return;
+    }
+    editProfileErrorBox.style.display = 'none';
+    editProfileSendCodeBtn.disabled = true;
+    editProfileSendCodeBtn.textContent = '발송 중...';
+
+    var res = await supabase.functions.invoke('send-verification-code', { body: { email: email } });
+
+    editProfileSendCodeBtn.disabled = false;
+    editProfileSendCodeBtn.textContent = '인증코드 발송';
+
+    if (res.error || (res.data && res.data.error)) {
+      var errMsg = (res.data && res.data.error) || res.error.message;
+      editProfileErrorBox.textContent = '인증코드 발송에 실패했습니다: ' + errMsg;
+      editProfileErrorBox.style.display = 'block';
+      return;
+    }
+
+    editProfileCodeField.style.display = 'block';
+    editProfileEmailStatus.style.color = 'var(--gray-500)';
+    editProfileEmailStatus.textContent = '인증코드를 발송했습니다. 메일을 확인해주세요.';
+  });
+
+  editProfileCheckCodeBtn.addEventListener('click', async function () {
+    var email = editProfileEmailInput.value.trim();
+    var code = editProfileCodeInput.value.trim();
+    if (!code) {
+      editProfileErrorBox.textContent = '인증코드를 입력해주세요.';
+      editProfileErrorBox.style.display = 'block';
+      return;
+    }
+    editProfileErrorBox.style.display = 'none';
+    editProfileCheckCodeBtn.disabled = true;
+    editProfileCheckCodeBtn.textContent = '확인 중...';
+
+    var res = await supabase.functions.invoke('verify-email-code', { body: { email: email, code: code } });
+
+    editProfileCheckCodeBtn.disabled = false;
+    editProfileCheckCodeBtn.textContent = '확인';
+
+    if (res.error || !res.data || !res.data.verified) {
+      var reason = (res.data && res.data.reason) || (res.error && res.error.message) || '인증에 실패했습니다.';
+      editProfileErrorBox.textContent = reason;
+      editProfileErrorBox.style.display = 'block';
+      profileEmailVerified = false;
+      return;
+    }
+
+    profileEmailVerified = true;
+    editProfileEmailStatus.style.color = 'var(--success)';
+    editProfileEmailStatus.textContent = '✓ 인증 완료되었습니다. 저장을 눌러 반영하세요.';
+  });
+
+  function openPwConfirmModal() {
+    pwConfirmInput.value = '';
+    pwConfirmErrorBox.style.display = 'none';
+    pwConfirmModalOverlay.classList.add('show');
+    pwConfirmInput.focus();
+  }
+  document.getElementById('pwConfirmCancelBtn').addEventListener('click', function () {
+    pwConfirmModalOverlay.classList.remove('show');
+  });
+  pwConfirmModalOverlay.addEventListener('click', function (e) { if (e.target === pwConfirmModalOverlay) pwConfirmModalOverlay.classList.remove('show'); });
+
+  pwConfirmConfirmBtn.addEventListener('click', async function () {
+    var pw = pwConfirmInput.value;
+    if (!pw) {
+      pwConfirmErrorBox.textContent = '비밀번호를 입력해주세요.';
+      pwConfirmErrorBox.style.display = 'block';
+      return;
+    }
+
+    pwConfirmConfirmBtn.disabled = true;
+    pwConfirmConfirmBtn.textContent = '확인 중...';
+
+    // 세션을 새로 만드는 게 아니라, 현재 로그인된 이메일+입력한 비밀번호가 맞는지만 재검증하는 용도
+    var reauth = await supabase.auth.signInWithPassword({ email: currentUser.email, password: pw });
+
+    pwConfirmConfirmBtn.disabled = false;
+    pwConfirmConfirmBtn.textContent = '확인';
+
+    if (reauth.error) {
+      pwConfirmErrorBox.textContent = '비밀번호가 올바르지 않습니다.';
+      pwConfirmErrorBox.style.display = 'block';
+      return;
+    }
+
+    pwConfirmModalOverlay.classList.remove('show');
+    openEditProfileModal();
+  });
+
+  function openEditProfileModal() {
+    editProfileNameInput.value = currentUser.name || '';
+    editProfilePhoneInput.value = currentUser.phone || '';
+    originalPersonalEmail = currentUser.personal_email || '';
+    editProfileEmailInput.value = originalPersonalEmail;
+    profileEmailVerified = false;
+    editProfileCodeField.style.display = 'none';
+    editProfileCodeInput.value = '';
+    editProfileEmailStatus.textContent = '';
+    editProfileErrorBox.style.display = 'none';
+    editProfileModalOverlay.classList.add('show');
+  }
+  document.getElementById('editProfileCancelBtn').addEventListener('click', function () {
+    editProfileModalOverlay.classList.remove('show');
+  });
+  editProfileModalOverlay.addEventListener('click', function (e) { if (e.target === editProfileModalOverlay) editProfileModalOverlay.classList.remove('show'); });
+
+  editProfileSaveBtn.addEventListener('click', async function () {
+    var name = editProfileNameInput.value.trim();
+    var phone = editProfilePhoneInput.value.trim();
+    var email = editProfileEmailInput.value.trim();
+    var emailChanged = email !== originalPersonalEmail;
+
+    if (!name) {
+      editProfileErrorBox.textContent = '이름을 입력해주세요.';
+      editProfileErrorBox.style.display = 'block';
+      return;
+    }
+    if (emailChanged && email && !profileEmailVerified) {
+      editProfileErrorBox.textContent = '개인 이메일을 변경하려면 인증코드 확인을 먼저 완료해주세요.';
+      editProfileErrorBox.style.display = 'block';
+      return;
+    }
+
+    editProfileSaveBtn.disabled = true;
+    editProfileSaveBtn.textContent = '저장 중...';
+
+    var res = await supabase.from('users')
+      .update({ name: name, phone: phone || null, personal_email: email || null })
+      .eq('id', currentUser.id).select();
+
+    editProfileSaveBtn.disabled = false;
+    editProfileSaveBtn.textContent = '저장';
+
+    if (res.error) {
+      editProfileErrorBox.textContent = '저장에 실패했습니다: ' + res.error.message;
+      editProfileErrorBox.style.display = 'block';
+      return;
+    }
+    // RLS에 막히면 에러 없이 0건 처리될 수 있어서 반영 건수를 직접 확인
+    if (!res.data || !res.data.length) {
+      editProfileErrorBox.textContent = '저장에 실패했습니다: 권한이 없거나 반영되지 않았습니다.';
+      editProfileErrorBox.style.display = 'block';
+      return;
+    }
+
+    currentUser.name = name;
+    currentUser.phone = phone || null;
+    currentUser.personal_email = email || null;
+    renderProfile();
+    editProfileModalOverlay.classList.remove('show');
+    showPageMessage('회원정보가 수정되었습니다.', 'success');
+  });
+
+  var ROLE_HOME = { assistant: 'index.html', mid_admin: 'manager.html', final_admin: 'admin.html' };
   function mainback() {
-    window.location.href = "index.html";
+    window.location.href = (currentUser && ROLE_HOME[currentUser.role]) || 'index.html';
   }
 
   (async function init() {

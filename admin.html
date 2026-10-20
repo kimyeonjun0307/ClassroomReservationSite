@@ -422,6 +422,13 @@
   var ROOM_EQUIP_BY_ID = {};  // room_id -> [equipment name]
   var SEMESTERS = [];         // semesters row 전체 (전역 공유)
   var ASSISTANT_USERS = [];   // role='assistant'인 사용자 전체 (중간관리자 지정용 후보 목록)
+  var MID_ADMIN_USERS = [];   // role='mid_admin'인 사용자 전체 (담당 강의실 0개여도 전부 포함)
+
+  // 동명이인 구분용: 이름 뒤에 조교 아이디(staff_no)를 괄호로 붙여서 표시
+  function nameWithId(u) {
+    if (!u) return "";
+    return u.name + (u.staff_no ? " (" + u.staff_no + ")" : "");
+  }
 
   function buildingName(id) {
     var b = BUILDINGS_LIST.filter(function (x) { return x.id === id; })[0];
@@ -437,12 +444,17 @@
     return ROOMS.filter(function (r) { return r.id === id; })[0] || null;
   }
 
-  /* 담당 관리자 id -> { info, rooms:[room,...] } */
+  /* 담당 관리자 id -> { info, rooms:[room,...] }
+     주의: users(role='mid_admin')를 기준으로 먼저 채우고 그 다음 rooms를 끼워넣는다.
+     전에는 rooms부터 돌면서 매니저가 있는 것만 모았어서, 담당 강의실이 0개인
+     mid_admin은 목록에서 완전히 사라지는 버그가 있었음. */
   function buildManagersMap() {
     var map = {};
+    MID_ADMIN_USERS.forEach(function (u) {
+      map[u.id] = { info: u, rooms: [] };
+    });
     ROOMS.forEach(function (r) {
-      if (!r.manager_id || !r.manager) return;
-      if (!map[r.manager_id]) map[r.manager_id] = { info: r.manager, rooms: [] };
+      if (!r.manager_id || !map[r.manager_id]) return;
       map[r.manager_id].rooms.push(r);
     });
     return map;
@@ -454,14 +466,16 @@
 
     var roomsRes = await supabase
       .from("rooms")
-      .select("*, manager:manager_id(id, name)")
+      .select("*, manager:manager_id(id, name, staff_no)")
       .order("building_id")
       .order("floor")
       .order("room_no");
     ROOMS = (!roomsRes.error && roomsRes.data) ? roomsRes.data : [];
 
-    var usersRes = await supabase.from("users").select("id, name, role").eq("role", "assistant").order("name");
-    ASSISTANT_USERS = (!usersRes.error && usersRes.data) ? usersRes.data : [];
+    var usersRes = await supabase.from("users").select("id, name, role, staff_no").in("role", ["assistant", "mid_admin"]).order("name");
+    var allUsers = (!usersRes.error && usersRes.data) ? usersRes.data : [];
+    ASSISTANT_USERS = allUsers.filter(function (u) { return u.role === "assistant"; });
+    MID_ADMIN_USERS = allUsers.filter(function (u) { return u.role === "mid_admin"; });
 
     var roomIds = ROOMS.map(function (r) { return r.id; });
     ROOM_EQUIP_BY_ID = {};
@@ -519,7 +533,7 @@
     tbody.innerHTML = rooms.map(function (rm) {
       var equipNames = ROOM_EQUIP_BY_ID[rm.id] || [];
       var mgrChip = rm.manager
-        ? '<span class="manager-chip">' + rm.manager.name + "</span>"
+        ? '<span class="manager-chip">' + nameWithId(rm.manager) + "</span>"
         : '<span class="manager-chip none">미배정</span>';
       var status = rm.is_active ? "available" : "closed";
       var statusSelect = '<select class="status-select st-' + status + '" data-room-id="' + rm.id + '">' +
@@ -676,7 +690,7 @@
       return '<div class="manager-card">' +
         '<div class="manager-card-head">' +
           '<div class="manager-avatar">' + (m.name ? m.name.charAt(0) : "?") + '</div>' +
-          '<div><div class="manager-name">' + m.name + '</div><div class="manager-email">' + (m.email || "") + '</div></div>' +
+          '<div><div class="manager-name">' + nameWithId(m) + '</div><div class="manager-email">' + (m.email || "") + '</div></div>' +
         '</div>' +
         '<div class="manager-rooms-label">담당 강의실 (' + entry.rooms.length + ')</div>' +
         '<div class="manager-rooms-chips">' + chips + '</div>' +
@@ -702,7 +716,7 @@
       var checked = checkedRoomIds.indexOf(r.id) !== -1 ? " checked" : "";
       var takenLabel = "";
       if (r.manager_id && r.manager_id !== excludeManagerId && r.manager) {
-        takenLabel = '<span class="rcl-taken">' + r.manager.name + " 담당중</span>";
+        takenLabel = '<span class="rcl-taken">' + nameWithId(r.manager) + " 담당중</span>";
       }
       html += '<label class="rcl-item"><input type="checkbox" value="' + r.id + '"' + checked + ">" +
         buildingName(r.building_id) + " " + floorLabel(r.floor) + " " + r.room_no + "호" + takenLabel + "</label>";
@@ -721,7 +735,7 @@
       userSelect.innerHTML = '<option value="">지정 가능한 조교 계정이 없어요</option>';
     } else {
       userSelect.innerHTML = ASSISTANT_USERS.map(function (u) {
-        return '<option value="' + u.id + '">' + u.name + "</option>";
+        return '<option value="' + u.id + '">' + nameWithId(u) + "</option>";
       }).join("");
     }
     document.getElementById("amErrorBox").classList.remove("show");
