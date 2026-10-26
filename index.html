@@ -344,6 +344,65 @@
     font-weight: 700; cursor: pointer;
   }
   .seg.applied:hover { background: #FCE8C6; }
+
+  /* ---------- 캠퍼스 지도로 건물 찾기 ---------- */
+  .map-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(20,20,20,0.35); z-index: 200;
+  }
+  .map-overlay.show { display: block; }
+
+  .map-panel {
+    position: fixed; top: 0; right: 0; height: 100vh; width: 75vw; max-width: 1180px;
+    background: #fff; box-shadow: -12px 0 40px rgba(0,0,0,0.22);
+    transform: translateX(100%); transition: transform .28s ease; z-index: 201;
+    display: flex; flex-direction: column;
+  }
+  .map-panel.show { transform: translateX(0); }
+
+  .map-panel-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 26px; border-bottom: 1px solid var(--gray-200); flex-shrink: 0;
+  }
+  .map-panel-header h3 { margin: 0; font-size: 17px; font-weight: 700; color: var(--gray-900); }
+  .map-panel-header p { margin: 3px 0 0; font-size: 12.5px; color: var(--gray-500); }
+  .map-close-btn {
+    border: none; background: var(--gray-100); color: var(--gray-700); width: 32px; height: 32px;
+    border-radius: 50%; font-size: 15px; cursor: pointer; flex-shrink: 0;
+  }
+  .map-close-btn:hover { background: var(--gray-200); }
+
+  .map-image-wrap { flex: 1; overflow: auto; padding: 18px; }
+  .map-image-inner { position: relative; }
+  .map-image-inner img { display: block; width: 100%; height: auto; border-radius: 10px; user-select: none; }
+
+  /* 건물 자체가 버튼: 지도 이미지를 그 위치만큼 잘라서 자기 배경으로 깔아두고,
+     hover 시 그 조각 자체를 확대 + 그림자를 줘서 "건물이 떠오르는" 느낌을 냄 */
+  .map-hotspot {
+    position: absolute; cursor: pointer;
+    background-repeat: no-repeat;
+    filter: drop-shadow(0 0 0 rgba(0,0,0,0));
+    transform: scale(1); transform-origin: center center;
+    transition: transform .18s ease, filter .18s ease;
+    z-index: 2;
+  }
+  .map-hotspot:hover {
+    transform: scale(1.16);
+    filter: drop-shadow(0 10px 18px rgba(0,0,0,0.38));
+    z-index: 10;
+  }
+  .map-hotspot.inactive { filter: grayscale(0.65) brightness(0.92); }
+  .map-hotspot.inactive:hover { filter: grayscale(0.4) drop-shadow(0 8px 14px rgba(0,0,0,0.3)); }
+
+  .map-tooltip {
+    display: none; position: absolute; width: 280px; background: #fff; border-radius: 12px;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.22); padding: 16px 18px; z-index: 20; pointer-events: none;
+  }
+  .map-tooltip.show { display: block; }
+  .map-tooltip .mt-name { font-size: 15.5px; font-weight: 700; color: var(--gray-900); margin-bottom: 8px; }
+  .map-tooltip .mt-row { display: flex; gap: 8px; font-size: 12px; color: var(--gray-700); margin-bottom: 5px; line-height: 1.5; }
+  .map-tooltip .mt-row b { color: var(--gray-500); font-weight: 600; flex-shrink: 0; width: 64px; }
+  .map-tooltip .mt-hint { margin-top: 8px; font-size: 11.5px; color: var(--primary); font-weight: 600; }
+  .map-tooltip .mt-empty { font-size: 12.5px; color: var(--gray-500); }
 </style>
 </head>
 <body>
@@ -360,6 +419,28 @@
   </div>
 </header>
 
+<!-- 캠퍼스 지도로 건물 찾기 -->
+<div class="map-overlay" id="mapOverlay"></div>
+<div class="map-panel" id="mapPanel">
+  <div class="map-panel-header">
+    <div>
+      <h3>캠퍼스 지도에서 건물 찾기</h3>
+      <p>건물에 마우스를 올리면 정보가, 클릭하면 그 건물로 선택됩니다.</p>
+    </div>
+    <button type="button" class="map-close-btn" id="mapCloseBtn">✕</button>
+  </div>
+  <div class="map-image-wrap">
+    <div class="map-image-inner" id="mapImageWrap">
+      <img src="assets/dsu_map.png" alt="동서대학교 캠퍼스 지도" id="mapImage">
+      <div class="map-tooltip" id="mapTooltip">
+        <div class="mt-name" id="mtName"></div>
+        <div id="mtBody"></div>
+        <div class="mt-hint" id="mtHint"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="layout">
 
   <!-- LEFT -->
@@ -372,6 +453,7 @@
         <div class="building-search-wrap">
           <div class="building-input-row">
             <input type="text" id="buildingInput" placeholder="건물명을 입력하세요 (선택 사항)" autocomplete="off">
+            <button type="button" class="toggle-btn" id="mapTriggerBtn" title="캠퍼스 지도로 찾기">🗺️</button>
             <button type="button" class="toggle-btn" id="buildingToggle">▼</button>
           </div>
           <div class="building-dropdown" id="buildingDropdown"></div>
@@ -680,6 +762,7 @@
   // DB에서 채워지는 값들 (fetchAppData()가 페이지 로드 시 채움)
   var VALID_BUILDINGS = [];       // 건물명 목록 (status=true인 건물만)
   var BUILDINGS_BY_NAME = {};     // name -> {id, name, status}
+  var BUILDING_INFO_BY_ID = {}; // building_id -> {count, floorMin, floorMax, totalCapacity, typeCounts, equipSet} (캠퍼스 지도 호버카드용)
   var EQUIPMENT_LIST = [];        // [{id, name}]
   var ROOM_TYPES_LIST = [];       // [{id, name}]
   var ROOM_TYPE_NAME_BY_ID = {};  // id -> name
@@ -711,6 +794,30 @@
       BUILDINGS_BY_NAME = {};
       buildingsRes.data.forEach(function (b) { BUILDINGS_BY_NAME[b.name] = b; });
       renderBuildingOptions([]); // 드롭다운은 열릴 때 다시 채워짐
+    }
+
+    // 캠퍼스 지도 호버 카드에 보여줄 건물별 요약 정보 (강의실 수/층수/수용인원/공간유형/기자재)
+    BUILDING_INFO_BY_ID = {};
+    var roomsInfoRes = await supabase.from('rooms')
+      .select('building_id, floor, capacity, room_type:room_type_id(name), room_equipment(equipment:equipment_id(name))')
+      .eq('is_active', true);
+    if (!roomsInfoRes.error && roomsInfoRes.data) {
+      roomsInfoRes.data.forEach(function (r) {
+        var info = BUILDING_INFO_BY_ID[r.building_id];
+        if (!info) {
+          info = { count: 0, floorMin: null, floorMax: null, totalCapacity: 0, typeCounts: {}, equipSet: {} };
+          BUILDING_INFO_BY_ID[r.building_id] = info;
+        }
+        info.count += 1;
+        info.totalCapacity += (r.capacity || 0);
+        info.floorMin = (info.floorMin === null) ? r.floor : Math.min(info.floorMin, r.floor);
+        info.floorMax = (info.floorMax === null) ? r.floor : Math.max(info.floorMax, r.floor);
+        var typeName = (r.room_type && r.room_type.name) || '기타';
+        info.typeCounts[typeName] = (info.typeCounts[typeName] || 0) + 1;
+        (r.room_equipment || []).forEach(function (re) {
+          if (re.equipment && re.equipment.name) info.equipSet[re.equipment.name] = true;
+        });
+      });
     }
 
     var equipRes = await supabase.from('equipment').select('id, name').order('id');
@@ -859,6 +966,180 @@
       buildingHint.className = 'none';
       return false;
     }
+  }
+
+  /* ---------- 캠퍼스 지도로 건물 찾기 ---------- */
+  // 지도 이미지(assets/dsu_map.png, 원본 2528x1696) 위 건물마다 사각 영역을 %로 기록.
+  // x/y는 건물의 중심, w/h는 호버했을 때 "그 건물 부분"으로 잘라 보여줄 영역 크기.
+  // 위치가 안 맞으면 숫자만 조정하면 됨 (이미지 크기와 무관하게 항상 % 기준).
+  // 지도를 6구역으로 잘라서(assets/dsu_map.png) 하나씩 확대해 보면서 다시 잡은 좌표/크기.
+  // shape는 건물 윤곽에 가깝게 미리 만들어둔 clip-path 모양 중 하나를 고른 것 (완벽한 외곽선은
+  // 아니고, 사각형보다 건물 느낌 나게 다듬은 정도 — SHAPE_CLIPS에서 모양 자체를 조정 가능).
+  var MAP_SPOTS = [
+    { name: '국제협력관', xPct: 39.95, yPct: 33.31, wPct: 10.3, hPct: 13.0, shape: 'A' },
+    { name: '전자정보관', xPct: 48.00, yPct: 45.00, wPct: 16.0, hPct: 9.5, shape: 'B' },
+    { name: '보건의료관', xPct: 56.45, yPct: 26.89, wPct: 10.1, hPct: 10.6, shape: 'A' },
+    { name: '응용공학관', xPct: 62.46, yPct: 26.00, wPct: 14.6, hPct: 12.4, shape: 'B' },
+    { name: '산학협력관', xPct: 65.50, yPct: 43.98, wPct: 8.7, hPct: 10.6, shape: 'A' },
+    { name: '어문관', xPct: 30.29, yPct: 35.14, wPct: 9.1, hPct: 14.2, shape: 'A' },
+    { name: '국제관', xPct: 27.73, yPct: 28.17, wPct: 11.1, hPct: 13.0, shape: 'A' },
+    { name: '경영관', xPct: 33.58, yPct: 23.46, wPct: 10.3, hPct: 11.8, shape: 'D' },
+    { name: '디자인홀', xPct: 74.37, yPct: 39.08, wPct: 10.3, hPct: 10.6, shape: 'B' },
+    { name: '그린홀', xPct: 74.92, yPct: 25.71, wPct: 10.3, hPct: 9.4, shape: 'A' },
+    { name: '드림e벨리', xPct: 62.27, yPct: 34.20, wPct: 8.7, hPct: 9.4, shape: 'A' },
+    { name: '국제생활관 I', xPct: 70.77, yPct: 10.08, wPct: 9.9, hPct: 10.0, shape: 'A' },
+    { name: '뉴밀레니엄관', xPct: 82.44, yPct: 43.68, wPct: 8.7, hPct: 20.1, shape: 'C' },
+    { name: 'U-IT 관', dbName: 'UIT관', xPct: 87.25, yPct: 60.79, wPct: 10.6, hPct: 19.7, shape: 'C' },
+    { name: '교양교육관', xPct: 53.16, yPct: 12.15, wPct: 10.3, hPct: 10.6, shape: 'A' },
+    { name: '문화센터', xPct: 57.52, yPct: 78.47, wPct: 7.9, hPct: 16.5, shape: 'C' },
+    { name: '민석스포츠센터', xPct: 17.41, yPct: 52.77, wPct: 10.3, hPct: 13.0, shape: 'A' },
+    { name: '대학교회', xPct: 43.12, yPct: 59.55, wPct: 10.3, hPct: 13.6, shape: 'D' },
+    { name: '학생생활아파트', xPct: 77.93, yPct: 78.13, wPct: 11.9, hPct: 15.3, shape: 'B' },
+    { name: '국제생활관 II', xPct: 73.97, yPct: 67.09, wPct: 10.3, hPct: 11.8, shape: 'A' },
+    { name: '민석도서관', xPct: 10.09, yPct: 48.0, wPct: 13.1, hPct: 11.8, shape: 'B' },
+    { name: '외국어교육원', xPct: 66.43, yPct: 74.64, wPct: 7.9, hPct: 15.3, shape: 'A' },
+    { name: '글로벌빌리지', xPct: 93.57, yPct: 74.00, wPct: 7.9, hPct: 15.3, shape: 'A' },
+    { name: '종합운동장 · 스튜던트플라자', xPct: 57.75, yPct: 58.31, wPct: 19.0, hPct: 18.9, shape: 'E' }
+  ];
+
+  // 건물 윤곽 느낌용 clip-path 모양 모음 (요소 자기 박스 기준 0~100% 좌표)
+  var SHAPE_CLIPS = {
+    A: 'polygon(18% 0%, 85% 8%, 100% 55%, 78% 100%, 15% 92%, 0% 45%)',
+    B: 'polygon(8% 10%, 90% 0%, 100% 70%, 92% 100%, 10% 90%, 0% 30%)',
+    C: 'polygon(25% 0%, 90% 10%, 100% 85%, 75% 100%, 10% 90%, 0% 15%)',
+    D: 'polygon(30% 0%, 70% 0%, 100% 25%, 100% 75%, 70% 100%, 30% 100%, 0% 75%, 0% 25%)',
+    E: 'polygon(20% 5%, 80% 5%, 100% 50%, 80% 95%, 20% 95%, 0% 50%)'
+  };
+
+  var mapTriggerBtn = document.getElementById('mapTriggerBtn');
+  var mapOverlay = document.getElementById('mapOverlay');
+  var mapPanel = document.getElementById('mapPanel');
+  var mapCloseBtn = document.getElementById('mapCloseBtn');
+  var mapImageWrap = document.getElementById('mapImageWrap');
+  var mapImageEl = document.getElementById('mapImage');
+  var mapTooltip = document.getElementById('mapTooltip');
+  var TYPE_LABEL_ORDER = null; // 필요시 공간유형 표시 순서 커스터마이즈용 (지금은 그냥 등록 순서)
+
+  function openMapPanel() {
+    mapOverlay.classList.add('show');
+    mapPanel.classList.add('show');
+    // 패널이 display:none에서 막 열린 참이라 이미지 실제 렌더 크기를 바로 못 읽을 수 있어서 한 박자 늦게 재배치
+    requestAnimationFrame(positionHotspots);
+  }
+  function closeMapPanel() {
+    mapOverlay.classList.remove('show');
+    mapPanel.classList.remove('show');
+    mapTooltip.classList.remove('show');
+  }
+  mapTriggerBtn.addEventListener('click', openMapPanel);
+  mapCloseBtn.addEventListener('click', closeMapPanel);
+  mapOverlay.addEventListener('click', closeMapPanel);
+  // height:auto라 이미지가 실제로 로드돼야 clientHeight가 정확해짐 (그 전엔 핫스팟 위치가 다 틀어짐)
+  mapImageEl.addEventListener('load', positionHotspots);
+
+  var mapHotspotEls = [];
+
+  function renderMapHotspots() {
+    mapImageWrap.querySelectorAll('.map-hotspot').forEach(function (el) { el.remove(); });
+    mapHotspotEls = [];
+
+    MAP_SPOTS.forEach(function (spot) {
+      // 지도에 보이는 이름(spot.name)과 DB에 등록된 실제 건물명(spot.dbName)이 다를 수 있어서
+      // dbName이 있으면 그걸로, 없으면 지도 이름 그대로 매칭 시도
+      var building = BUILDINGS_BY_NAME[spot.dbName || spot.name];
+      var dot = document.createElement('div');
+      dot.className = 'map-hotspot' + (building ? '' : ' inactive');
+      dot.addEventListener('mouseenter', function () { showMapTooltip(spot, building); });
+      dot.addEventListener('mouseleave', function () { mapTooltip.classList.remove('show'); });
+      dot.addEventListener('click', function () { selectBuildingFromMap(spot, building); });
+      mapImageWrap.appendChild(dot);
+      mapHotspotEls.push({ el: dot, spot: spot });
+    });
+
+    positionHotspots();
+  }
+
+  // 실제 렌더링된 이미지 픽셀 크기를 기준으로, 각 핫스팟이 지도 이미지의 "그 부분만" 잘라서
+  // 보여주도록 배경 위치/크기를 계산 (반응형 — 창 크기 바뀌면 다시 계산해야 함)
+  function positionHotspots() {
+    var w = mapImageEl.clientWidth;
+    var h = mapImageEl.clientHeight;
+    if (!w || !h) return;
+
+    mapHotspotEls.forEach(function (item) {
+      var spot = item.spot;
+      var boxW = (spot.wPct / 100) * w;
+      var boxH = (spot.hPct / 100) * h;
+      var left = (spot.xPct / 100) * w - boxW / 2;
+      var top = (spot.yPct / 100) * h - boxH / 2;
+
+      var el = item.el;
+      el.style.left = left + 'px';
+      el.style.top = top + 'px';
+      el.style.width = boxW + 'px';
+      el.style.height = boxH + 'px';
+      el.style.backgroundImage = "url('assets/dsu_map.png')";
+      el.style.backgroundSize = w + 'px ' + h + 'px';
+      el.style.backgroundPosition = '-' + left + 'px -' + top + 'px';
+      el.style.clipPath = SHAPE_CLIPS[spot.shape] || SHAPE_CLIPS.A;
+    });
+  }
+
+  var mapResizeTimer = null;
+  window.addEventListener('resize', function () {
+    clearTimeout(mapResizeTimer);
+    mapResizeTimer = setTimeout(positionHotspots, 150);
+  });
+
+  function buildingInfoRowsHtml(info) {
+    if (!info || !info.count) {
+      return '<div class="mt-empty">아직 이 건물엔 등록된 강의실이 없어요.</div>';
+    }
+    var floorText = (info.floorMin === info.floorMax)
+      ? floorLabel(info.floorMin)
+      : (floorLabel(info.floorMin) + ' ~ ' + floorLabel(info.floorMax));
+    var typeText = Object.keys(info.typeCounts).map(function (t) {
+      return t + ' ' + info.typeCounts[t] + '실';
+    }).join(', ');
+    var equipNames = Object.keys(info.equipSet);
+    var equipText = equipNames.length ? equipNames.join(', ') : '-';
+
+    return '' +
+      '<div class="mt-row"><b>강의실</b><span>' + info.count + '실 (' + floorText + ')</span></div>' +
+      '<div class="mt-row"><b>공간유형</b><span>' + (typeText || '-') + '</span></div>' +
+      '<div class="mt-row"><b>수용인원</b><span>총 ' + info.totalCapacity + '명</span></div>' +
+      '<div class="mt-row"><b>보유기자재</b><span>' + equipText + '</span></div>';
+  }
+
+  function showMapTooltip(spot, building) {
+    document.getElementById('mtName').textContent = spot.name;
+    var info = building ? BUILDING_INFO_BY_ID[building.id] : null;
+    document.getElementById('mtBody').innerHTML = buildingInfoRowsHtml(info);
+    document.getElementById('mtHint').textContent = (info && info.count)
+      ? '클릭하면 이 건물로 검색돼요'
+      : (building ? '아직 등록된 강의실이 없어 검색은 안 돼요' : '아직 시스템에 등록되지 않은 건물이에요');
+
+    // 건물이 지도 오른쪽 절반이면 툴팁은 왼쪽으로, 왼쪽 절반이면 오른쪽으로 펼쳐서
+    // 마우스를 올린 건물 자체를 가리지 않게 함
+    var flipLeft = spot.xPct > 50;
+    mapTooltip.style.left = flipLeft ? '' : 'calc(' + spot.xPct + '% + 26px)';
+    mapTooltip.style.right = flipLeft ? 'calc(' + (100 - spot.xPct) + '% + 26px)' : '';
+    // 세로는 화면 위/아래로 넘치지 않게 범위 안에서 clamp
+    var topPct = Math.min(Math.max(spot.yPct - 10, 2), 78);
+    mapTooltip.style.top = topPct + '%';
+
+    mapTooltip.classList.add('show');
+  }
+
+  function selectBuildingFromMap(spot, building) {
+    var info = building ? BUILDING_INFO_BY_ID[building.id] : null;
+    if (!building || !info || !info.count) {
+      return; // 등록된 강의실이 없는 건물은 선택해도 검색할 게 없으므로 그냥 무시
+    }
+    buildingInput.value = spot.dbName || spot.name;
+    closeDropdown();
+    validateBuilding();
+    closeMapPanel();
   }
 
   // 입력 즉시 실시간 필터링 (대소문자 구분 없이 포함 매칭)
@@ -2002,6 +2283,7 @@
     var ok = await requireSessionAndLoadAssistant();
     if (!ok) return; // 로그인 안 돼있으면 login.html로 이동됨
     await fetchAppData();
+    renderMapHotspots();
     loadMyNotifications();
   })();
 </script>
